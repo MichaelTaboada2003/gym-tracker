@@ -17,6 +17,8 @@ export interface Database {
                     equipment: string;
                     notes: string | null;
                     created_at: string;
+                    time_per_rep_seconds: number;
+                    default_rest_seconds: number;
                 };
                 Insert: {
                     id?: string;
@@ -25,6 +27,8 @@ export interface Database {
                     equipment?: string;
                     notes?: string | null;
                     created_at?: string;
+                    time_per_rep_seconds?: number;
+                    default_rest_seconds?: number;
                 };
                 Update: {
                     id?: string;
@@ -33,6 +37,8 @@ export interface Database {
                     equipment?: string;
                     notes?: string | null;
                     created_at?: string;
+                    time_per_rep_seconds?: number;
+                    default_rest_seconds?: number;
                 };
             };
             routines: {

@@ -17,6 +17,7 @@ export interface ExerciseInProgress {
     previousBest: { weight: number; reps: number } | null;
     targetSets?: number;
     targetReps?: string;
+    restSeconds?: number;
     notes?: string | null;
 }
 
@@ -39,7 +40,7 @@ interface WorkoutState {
     addExercise: (
         exercise: Exercise,
         previousBest?: { weight: number; reps: number } | null,
-        overrides?: { targetSets?: number; targetReps?: string; notes?: string | null }
+        overrides?: { targetSets?: number; targetReps?: string; restSeconds?: number; notes?: string | null }
     ) => void;
     removeExercise: (index: number) => void;
     setCurrentExercise: (index: number) => void;
@@ -96,18 +97,22 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     addExercise: (
         exercise: Exercise,
         previousBest?: { weight: number; reps: number } | null,
-        overrides?: { targetSets?: number; targetReps?: string; notes?: string | null }
+        overrides?: { targetSets?: number; targetReps?: string; restSeconds?: number; notes?: string | null }
     ) => {
         const targetSets = overrides?.targetSets || 3;
         const targetReps = overrides?.targetReps; // String "6-8"
         // Parse numeric rep target for initial value if possible (e.g. "8-10" -> 8)
         const initialReps = targetReps ? parseInt(targetReps) || 10 : (previousBest?.reps || 10);
 
+        // Get rest seconds: from overrides, from exercise default, or fallback to 90
+        const restSeconds = overrides?.restSeconds || (exercise as any).default_rest_seconds || 90;
+
         const newExercise: ExerciseInProgress = {
             exercise,
             previousBest: previousBest || null,
             targetSets,
             targetReps,
+            restSeconds,
             notes: overrides?.notes,
             sets: Array(targetSets).fill(0).map((_, i) => ({
                 id: generateId(),

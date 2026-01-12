@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } 
 import { Calendar, DateData, LocaleConfig } from 'react-native-calendars';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
 import { Card } from '../../components/ui/Card';
 import { supabase } from '../../lib/supabase';
@@ -174,18 +174,27 @@ export default function CalendarScreen() {
     };
 
     return (
-        <SafeAreaView style={styles.safeArea} edges={['top']}>
-            {/* Header with back button */}
-            <View style={styles.header}>
-                <TouchableOpacity
-                    onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/stats')}
-                    style={styles.backButton}
-                >
-                    <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Calendario</Text>
-                <View style={{ width: 40 }} />
-            </View>
+        <View style={styles.container}>
+            {/* Header with Gradient and Back Button */}
+            <LinearGradient
+                colors={[COLORS.primary + '15', 'transparent']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.header}
+            >
+                <View style={styles.headerContent}>
+                    <TouchableOpacity
+                        onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/stats')}
+                        style={styles.backButton}
+                    >
+                        <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+                    </TouchableOpacity>
+                    <View style={styles.headerTextContainer}>
+                        <Text style={styles.headerSubtitle}>HISTORIAL</Text>
+                        <Text style={styles.headerTitle}>Calendario</Text>
+                    </View>
+                </View>
+            </LinearGradient>
 
             <ScrollView
                 style={styles.scrollView}
@@ -310,31 +319,47 @@ export default function CalendarScreen() {
                     </View>
                 </Card>
             </ScrollView>
-        </SafeAreaView>
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
-    safeArea: {
+    container: {
         flex: 1,
         backgroundColor: COLORS.background,
     },
     header: {
+        paddingHorizontal: SPACING.lg,
+        paddingTop: SPACING.xl,
+        paddingBottom: SPACING.lg,
+    },
+    headerContent: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: SPACING.md,
-        paddingVertical: SPACING.sm,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.surfaceHighlight,
+        gap: SPACING.md,
     },
     backButton: {
-        padding: SPACING.sm,
+        width: 40,
+        height: 40,
+        alignItems: 'center',
+        justifyContent: 'center',
         borderRadius: BORDER_RADIUS.md,
+        backgroundColor: COLORS.surfaceLight,
+    },
+    headerTextContainer: {
+        flex: 1,
+    },
+    headerSubtitle: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: COLORS.primary,
+        letterSpacing: 3,
+        marginBottom: 4,
+        textTransform: 'uppercase',
     },
     headerTitle: {
-        fontSize: FONT_SIZES.lg,
-        fontWeight: '700',
+        fontSize: 36,
+        fontWeight: '800',
         color: COLORS.textPrimary,
     },
     scrollView: {

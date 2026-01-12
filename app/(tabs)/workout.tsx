@@ -15,6 +15,7 @@ import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colo
 import { Button } from '../../components/ui/Button';
 import { IconButton } from '../../components/ui/IconButton';
 import { ExerciseCard } from '../../components/workout/ExerciseCard';
+import { WorkoutSummaryModal, WorkoutSummaryData } from '../../components/workout/WorkoutSummaryModal';
 import { useWorkoutSession } from '../../hooks/useWorkoutSession';
 import { useExercises } from '../../hooks/useExercises';
 import { useRoutines, RoutineWithExercises } from '../../hooks/useRoutines';
@@ -23,9 +24,9 @@ import { Exercise } from '../../lib/database.types';
 
 // Sample exercises for demo (as fallback)
 const SAMPLE_EXERCISES: Exercise[] = [
-    { id: '1', name: 'Press Banca', muscle_group: 'Pecho', equipment: 'barbell', notes: null, created_at: '' },
-    { id: '2', name: 'Sentadilla', muscle_group: 'Piernas', equipment: 'barbell', notes: null, created_at: '' },
-    { id: '3', name: 'Peso Muerto', muscle_group: 'Espalda', equipment: 'barbell', notes: null, created_at: '' },
+    { id: '1', name: 'Press Banca', muscle_group: 'Pecho', equipment: 'barbell', notes: null, created_at: '', time_per_rep_seconds: 3, default_rest_seconds: 120 },
+    { id: '2', name: 'Sentadilla', muscle_group: 'Piernas', equipment: 'barbell', notes: null, created_at: '', time_per_rep_seconds: 4, default_rest_seconds: 180 },
+    { id: '3', name: 'Peso Muerto', muscle_group: 'Espalda', equipment: 'barbell', notes: null, created_at: '', time_per_rep_seconds: 4, default_rest_seconds: 180 },
 ];
 
 export default function WorkoutScreen() {
@@ -52,6 +53,8 @@ export default function WorkoutScreen() {
     const { routines, loading: loadingRoutines } = useRoutines();
     const [showExercisePicker, setShowExercisePicker] = useState(false);
     const [showRoutinePicker, setShowRoutinePicker] = useState(false);
+    const [showSummary, setShowSummary] = useState(false);
+    const [summaryData, setSummaryData] = useState<WorkoutSummaryData | null>(null);
     const [duration, setDuration] = useState(0);
 
     const availableExercises = dbExercises.length > 0 ? dbExercises : SAMPLE_EXERCISES;
@@ -72,11 +75,42 @@ export default function WorkoutScreen() {
     };
 
     const handleFinishWorkout = async () => {
+        // Calculate summary data before saving
+        const workoutDuration = startedAt
+            ? Math.round((Date.now() - startedAt.getTime()) / 60000)
+            : 0;
+
+        const totalVolume = getTotalVolume();
+        const totalSets = getCompletedSets();
+        const totalReps = exercises.reduce((sum, ex) =>
+            sum + ex.sets.filter(s => s.isCompleted && !s.isWarmup).reduce((rSum, s) => rSum + s.reps, 0), 0
+        );
+
+        // Prepare summary data
+        const summary: WorkoutSummaryData = {
+            routineName,
+            duration: workoutDuration,
+            exercises: [...exercises],
+            totalVolume,
+            totalSets,
+            totalReps,
+            personalRecords: [], // TODO: Calculate PRs by comparing with previous workouts
+        };
+
         try {
             await saveWorkout();
+            // Show summary after successful save
+            setSummaryData(summary);
+            setShowSummary(true);
         } catch (error) {
             console.error('Error saving workout:', error);
+            Alert.alert('Error', 'No se pudo guardar el entrenamiento');
         }
+    };
+
+    const handleCloseSummary = () => {
+        setShowSummary(false);
+        setSummaryData(null);
     };
 
     const handleStartFromRoutine = (routine: RoutineWithExercises) => {
@@ -85,12 +119,26 @@ export default function WorkoutScreen() {
 
         // Add all exercises from the routine
         routine.routine_exercises.forEach((re) => {
+            // Parse rest time from notes JSON if present
+            let restSeconds = re.exercise.default_rest_seconds || 90;
+            if (re.notes) {
+                try {
+                    const parsed = JSON.parse(re.notes);
+                    if (parsed.restTime) {
+                        restSeconds = parsed.restTime;
+                    }
+                } catch {
+                    // Notes is just a regular string
+                }
+            }
+
             addExercise({
                 ...re.exercise,
                 id: re.exercise_id,
             } as any, null, {
                 targetSets: re.target_sets,
                 targetReps: re.target_reps,
+                restSeconds,
                 notes: re.notes
             });
         });
@@ -260,6 +308,7 @@ export default function WorkoutScreen() {
                             exercise={ex.exercise}
                             sets={ex.sets}
                             previousBest={ex.previousBest}
+                            restSeconds={ex.restSeconds}
                             onUpdateSet={(setIndex, data) => updateSet(index, setIndex, data)}
                             onCompleteSet={(setIndex) => completeSet(index, setIndex)}
                             onAddSet={() => addSet(index)}
@@ -290,6 +339,11 @@ export default function WorkoutScreen() {
             </View>
 
             <ExercisePickerModal />
+            <WorkoutSummaryModal
+                visible={showSummary}
+                data={summaryData}
+                onClose={handleCloseSummary}
+            />
         </View>
     );
 }

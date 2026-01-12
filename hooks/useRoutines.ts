@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { db, generateId } from '../lib/localDatabase';
 import { Routine, RoutineExercise } from '../lib/database.types';
 
 export type RoutineWithExercises = Routine & {
@@ -19,52 +19,51 @@ export function useRoutines() {
     const fetchRoutines = async () => {
         try {
             setLoading(true);
-            const { data, error } = await supabase
-                .from('routines')
-                .select(`
-                    *,
-                    routine_exercises (
-                        *,
-                        exercise:exercises (
-                            name,
-                            muscle_group
-                        )
-                    )
-                `)
-                .order('created_at', { ascending: false });
 
-            if (error) throw error;
-            setRoutines(data as RoutineWithExercises[]);
+            // 1. Fetch all routines
+            const routineRows = await db.getAllAsync<Routine>(
+                'SELECT * FROM routines ORDER BY created_at DESC;'
+            );
+
+            // 2. For each routine, fetch its exercises with exercise details
+            const routinesWithExercises: RoutineWithExercises[] = await Promise.all(
+                (routineRows || []).map(async (routine) => {
+                    const exerciseRows = await db.getAllAsync<
+                        RoutineExercise & { exercise_name: string; exercise_muscle_group: string }
+                    >(
+                        `SELECT re.*, e.name as exercise_name, e.muscle_group as exercise_muscle_group
+                         FROM routine_exercises re
+                         JOIN exercises e ON re.exercise_id = e.id
+                         WHERE re.routine_id = ?
+                         ORDER BY re.order_index;`,
+                        [routine.id]
+                    );
+
+                    return {
+                        ...routine,
+                        routine_exercises: (exerciseRows || []).map((row) => ({
+                            id: row.id,
+                            routine_id: row.routine_id,
+                            exercise_id: row.exercise_id,
+                            order_index: row.order_index,
+                            target_sets: row.target_sets,
+                            target_reps: row.target_reps,
+                            notes: row.notes,
+                            exercise: {
+                                name: row.exercise_name,
+                                muscle_group: row.exercise_muscle_group,
+                            },
+                        })),
+                    };
+                })
+            );
+
+            setRoutines(routinesWithExercises);
         } catch (err) {
             console.error('Error fetching routines:', err);
             setError('No se pudieron cargar las rutinas');
         } finally {
             setLoading(false);
-        }
-    };
-
-    const getRoutineDetails = async (id: string): Promise<RoutineWithExercises | null> => {
-        try {
-            const { data, error } = await supabase
-                .from('routines')
-                .select(`
-                    *,
-                    routine_exercises (
-                        *,
-                        exercise:exercises (
-                            name,
-                            muscle_group
-                        )
-                    )
-                `)
-                .eq('id', id)
-                .single();
-
-            if (error) throw error;
-            return data as RoutineWithExercises;
-        } catch (err) {
-            console.error('Error fetching routine details:', err);
-            return null;
         }
     };
 
@@ -75,46 +74,44 @@ export function useRoutines() {
     ) => {
         try {
             setLoading(true);
-            // Calculate duration: (sets * avg 45s per set) + (rest between sets)
+            const routineId = generateId();
+            const now = new Date().toISOString();
+
+            // Calculate duration
             const totalDuration = exercises.reduce((acc, ex) => {
-                const setsDuration = ex.sets * 0.75; // ~45 seconds per set in minutes
-                const restDuration = ((ex.sets - 1) * (ex.restTime || 90)) / 60; // rest between sets
+                const setsDuration = ex.sets * 0.75;
+                const restDuration = ((ex.sets - 1) * (ex.restTime || 90)) / 60;
                 return acc + setsDuration + restDuration;
             }, 0);
 
             // 1. Create routine
-            const { data: routineData, error: routineError } = await supabase
-                .from('routines')
-                .insert({
-                    name,
-                    description,
-                    estimated_duration: Math.round(totalDuration),
-                })
-                .select()
-                .single();
+            await db.runAsync(
+                `INSERT INTO routines (id, name, description, estimated_duration, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?);`,
+                [routineId, name, description, Math.round(totalDuration), now, now]
+            );
 
-            if (routineError) throw routineError;
-
-            // 2. Add exercises with rest time stored in notes as JSON
-            if (exercises.length > 0) {
-                const routineExercises = exercises.map((ex, index) => ({
-                    routine_id: routineData.id,
-                    exercise_id: ex.id,
-                    order_index: index,
-                    target_sets: ex.sets,
-                    target_reps: ex.reps.toString(),
-                    notes: ex.restTime ? JSON.stringify({ restTime: ex.restTime }) : null,
-                }));
-
-                const { error: exercisesError } = await supabase
-                    .from('routine_exercises')
-                    .insert(routineExercises);
-
-                if (exercisesError) throw exercisesError;
+            // 2. Add exercises
+            for (let i = 0; i < exercises.length; i++) {
+                const ex = exercises[i];
+                const reId = generateId();
+                await db.runAsync(
+                    `INSERT INTO routine_exercises (id, routine_id, exercise_id, order_index, target_sets, target_reps, notes)
+                     VALUES (?, ?, ?, ?, ?, ?, ?);`,
+                    [
+                        reId,
+                        routineId,
+                        ex.id,
+                        i,
+                        ex.sets,
+                        ex.reps.toString(),
+                        ex.restTime ? JSON.stringify({ restTime: ex.restTime }) : null,
+                    ]
+                );
             }
 
             await fetchRoutines();
-            return routineData;
+            return { id: routineId, name, description, estimated_duration: Math.round(totalDuration) };
         } catch (err) {
             console.error('Error creating routine:', err);
             throw err;
@@ -122,7 +119,6 @@ export function useRoutines() {
             setLoading(false);
         }
     };
-
 
     const updateRoutine = async (
         id: string,
@@ -132,6 +128,7 @@ export function useRoutines() {
     ) => {
         try {
             setLoading(true);
+            const now = new Date().toISOString();
 
             // Calculate duration
             const totalDuration = exercises.reduce((acc, ex) => {
@@ -141,42 +138,31 @@ export function useRoutines() {
             }, 0);
 
             // 1. Update routine metadata
-            const { error: routineError } = await supabase
-                .from('routines')
-                .update({
-                    name,
-                    description,
-                    estimated_duration: Math.round(totalDuration),
-                    updated_at: new Date().toISOString(),
-                })
-                .eq('id', id);
-
-            if (routineError) throw routineError;
+            await db.runAsync(
+                `UPDATE routines SET name = ?, description = ?, estimated_duration = ?, updated_at = ? WHERE id = ?;`,
+                [name, description, Math.round(totalDuration), now, id]
+            );
 
             // 2. Delete existing exercises
-            const { error: deleteError } = await supabase
-                .from('routine_exercises')
-                .delete()
-                .eq('routine_id', id);
-
-            if (deleteError) throw deleteError;
+            await db.runAsync('DELETE FROM routine_exercises WHERE routine_id = ?;', [id]);
 
             // 3. Insert new exercises
-            if (exercises.length > 0) {
-                const routineExercises = exercises.map((ex, index) => ({
-                    routine_id: id,
-                    exercise_id: ex.id,
-                    order_index: index,
-                    target_sets: ex.sets,
-                    target_reps: ex.reps.toString(),
-                    notes: ex.restTime ? JSON.stringify({ restTime: ex.restTime }) : null,
-                }));
-
-                const { error: exercisesError } = await supabase
-                    .from('routine_exercises')
-                    .insert(routineExercises);
-
-                if (exercisesError) throw exercisesError;
+            for (let i = 0; i < exercises.length; i++) {
+                const ex = exercises[i];
+                const reId = generateId();
+                await db.runAsync(
+                    `INSERT INTO routine_exercises (id, routine_id, exercise_id, order_index, target_sets, target_reps, notes)
+                     VALUES (?, ?, ?, ?, ?, ?, ?);`,
+                    [
+                        reId,
+                        id,
+                        ex.id,
+                        i,
+                        ex.sets,
+                        ex.reps.toString(),
+                        ex.restTime ? JSON.stringify({ restTime: ex.restTime }) : null,
+                    ]
+                );
             }
 
             await fetchRoutines();
@@ -188,15 +174,9 @@ export function useRoutines() {
         }
     };
 
-
     const deleteRoutine = async (id: string) => {
         try {
-            const { error } = await supabase
-                .from('routines')
-                .delete()
-                .eq('id', id);
-
-            if (error) throw error;
+            await db.runAsync('DELETE FROM routines WHERE id = ?;', [id]);
             setRoutines((prev) => prev.filter((r) => r.id !== id));
         } catch (err) {
             console.error('Error deleting routine:', err);
@@ -216,6 +196,5 @@ export function useRoutines() {
         createRoutine,
         updateRoutine,
         deleteRoutine,
-        getRoutineDetails
     };
 }

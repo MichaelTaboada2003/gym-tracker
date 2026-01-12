@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Dimensions, RefreshControl, TouchableOpacity } from 'react-native';
 import { BarChart, PieChart } from 'react-native-gifted-charts';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
@@ -171,169 +172,192 @@ export default function StatsScreen() {
     const topRecords = getTopRecords(5);
 
     return (
-        <ScrollView
-            style={styles.container}
-            contentContainerStyle={styles.content}
-            refreshControl={
-                <RefreshControl refreshing={loading || advancedLoading} onRefresh={handleRefresh} tintColor={COLORS.primary} />
-            }
-        >
-            {/* Calendar Link */}
-            <TouchableOpacity
-                style={styles.calendarLink}
-                onPress={() => router.push('/calendar')}
+        <View style={styles.container}>
+            {/* Header with Gradient */}
+            <LinearGradient
+                colors={[COLORS.primary + '15', 'transparent']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.header}
             >
-                <View style={styles.calendarLinkContent}>
-                    <Ionicons name="calendar" size={24} color={COLORS.primary} />
-                    <View style={styles.calendarLinkText}>
-                        <Text style={styles.calendarLinkTitle}>Calendario de Entrenamientos</Text>
-                        <Text style={styles.calendarLinkSub}>Ver historial por día</Text>
+                <View style={styles.headerContent}>
+                    <View style={styles.headerTextContainer}>
+                        <Text style={styles.headerSubtitle}>ANALIZA TU</Text>
+                        <Text style={styles.headerTitle}>Progreso</Text>
+                    </View>
+                    <View style={styles.headerButtons}>
+                        <TouchableOpacity
+                            style={styles.headerBtnSecondary}
+                            onPress={() => router.push('/calendar')}
+                        >
+                            <LinearGradient
+                                colors={COLORS.gradients.secondary}
+                                style={styles.headerBtnGradient}
+                            >
+                                <Ionicons name="calendar" size={20} color="#FFF" />
+                            </LinearGradient>
+                        </TouchableOpacity>
                     </View>
                 </View>
-                <Ionicons name="chevron-forward" size={24} color={COLORS.textMuted} />
-            </TouchableOpacity>
+            </LinearGradient>
 
-            {/* Weekly Activity Chart */}
-            <Card title={hasVolumeData ? "Volumen Semanal (kg)" : "Entrenamientos Semanal"}>
-                <View style={styles.chartContainer}>
-                    {hasVolumeData ? (
-                        <BarChart
-                            data={weeklyVolume}
-                            width={width - SPACING.md * 4 - 60}
-                            height={150}
-                            barWidth={24}
-                            barBorderRadius={4}
-                            frontColor={COLORS.primary}
-                            yAxisColor={'transparent'}
-                            xAxisColor={COLORS.surfaceHighlight}
-                            yAxisTextStyle={{ color: COLORS.textSecondary, fontSize: 10 }}
-                            xAxisLabelTextStyle={{ color: COLORS.textSecondary, fontSize: 11, fontWeight: '600' }}
-                            noOfSections={4}
-                            maxValue={maxVolume}
-                            hideRules
-                            isAnimated
-                            spacing={16}
-                        />
-                    ) : hasSessionsThisWeek ? (
-                        <BarChart
-                            data={weeklySessions}
-                            width={width - SPACING.md * 4 - 60}
-                            height={150}
-                            barWidth={24}
-                            barBorderRadius={4}
-                            frontColor={COLORS.success}
-                            yAxisColor={'transparent'}
-                            xAxisColor={COLORS.surfaceHighlight}
-                            yAxisTextStyle={{ color: COLORS.textSecondary, fontSize: 10 }}
-                            xAxisLabelTextStyle={{ color: COLORS.textSecondary, fontSize: 11, fontWeight: '600' }}
-                            noOfSections={4}
-                            maxValue={Math.max(...weeklySessions.map(v => v.value), 3)}
-                            hideRules
-                            isAnimated
-                            spacing={16}
-                        />
+            <ScrollView
+                style={styles.scrollView}
+                contentContainerStyle={styles.content}
+                refreshControl={
+                    <RefreshControl refreshing={loading || advancedLoading} onRefresh={handleRefresh} tintColor={COLORS.primary} />
+                }
+            >
+
+                {/* Weekly Activity Chart */}
+                <Card title={hasVolumeData ? "Volumen Semanal (kg)" : "Entrenamientos Semanal"}>
+                    <View style={styles.chartContainer}>
+                        {hasVolumeData ? (
+                            <BarChart
+                                data={weeklyVolume}
+                                width={width - SPACING.md * 4 - 60}
+                                height={150}
+                                barWidth={24}
+                                barBorderRadius={4}
+                                frontColor={COLORS.primary}
+                                yAxisColor={'transparent'}
+                                xAxisColor={COLORS.surfaceHighlight}
+                                yAxisTextStyle={{ color: COLORS.textSecondary, fontSize: 10 }}
+                                xAxisLabelTextStyle={{ color: COLORS.textSecondary, fontSize: 11, fontWeight: '600' }}
+                                noOfSections={4}
+                                maxValue={maxVolume}
+                                hideRules
+                                isAnimated
+                                spacing={16}
+                            />
+                        ) : hasSessionsThisWeek ? (
+                            <BarChart
+                                data={weeklySessions}
+                                width={width - SPACING.md * 4 - 60}
+                                height={150}
+                                barWidth={24}
+                                barBorderRadius={4}
+                                frontColor={COLORS.success}
+                                yAxisColor={'transparent'}
+                                xAxisColor={COLORS.surfaceHighlight}
+                                yAxisTextStyle={{ color: COLORS.textSecondary, fontSize: 10 }}
+                                xAxisLabelTextStyle={{ color: COLORS.textSecondary, fontSize: 11, fontWeight: '600' }}
+                                noOfSections={4}
+                                maxValue={Math.max(...weeklySessions.map(v => v.value), 3)}
+                                hideRules
+                                isAnimated
+                                spacing={16}
+                            />
+                        ) : (
+                            <View style={styles.emptyChart}>
+                                <Ionicons name="bar-chart-outline" size={48} color={COLORS.textMuted} />
+                                <Text style={styles.emptyChartText}>Sin datos esta semana</Text>
+                            </View>
+                        )}
+                    </View>
+                </Card>
+
+                {/* Muscle Group Distribution - Pie Chart */}
+                <Card title="Distribución por Grupo Muscular">
+                    {muscleGroupStats.length > 0 ? (
+                        <View style={styles.chartContainer}>
+                            <View style={styles.pieContainer}>
+                                <PieChart
+                                    data={pieChartData}
+                                    donut
+                                    showGradient
+                                    sectionAutoFocus
+                                    radius={110}
+                                    innerRadius={75}
+                                    innerCircleColor={COLORS.surface}
+                                    centerLabelComponent={() => (
+                                        <View style={styles.pieCenter}>
+                                            <Text style={styles.pieCenterValue}>{stats.totalSets}</Text>
+                                            <Text style={styles.pieCenterLabel}>Series</Text>
+                                        </View>
+                                    )}
+                                />
+                            </View>
+                            <View style={styles.legendContainer}>
+                                {muscleGroupStats.map((stat) => (
+                                    <View key={stat.muscleGroup} style={styles.legendItemChip}>
+                                        <View style={[styles.legendDot, { backgroundColor: stat.color }]} />
+                                        <Text style={styles.legendText}>{stat.muscleGroup}</Text>
+                                        <Text style={styles.legendValue}>{stat.sets}</Text>
+                                    </View>
+                                ))}
+                            </View>
+                        </View>
+
+
+
                     ) : (
-                        <View style={styles.emptyChart}>
-                            <Ionicons name="bar-chart-outline" size={48} color={COLORS.textMuted} />
-                            <Text style={styles.emptyChartText}>Sin datos esta semana</Text>
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyText}>
+                                Completa entrenamientos para ver tu distribución
+                            </Text>
                         </View>
                     )}
-                </View>
-            </Card>
+                </Card>
 
-            {/* Muscle Group Distribution - Pie Chart */}
-            <Card title="Distribución por Grupo Muscular">
-                {muscleGroupStats.length > 0 ? (
-                    <View style={styles.pieChartSection}>
-                        <View style={styles.pieChartContainer}>
-                            <PieChart
-                                data={pieChartData}
-                                radius={70}
-                                innerRadius={40}
-                                centerLabelComponent={() => (
-                                    <View style={styles.pieCenter}>
-                                        <Text style={styles.pieCenterValue}>{stats.totalSets}</Text>
-                                        <Text style={styles.pieCenterLabel}>Series</Text>
+                {/* Personal Records - 1RM */}
+                <Card title="Records Personales 🏆 (1RM Estimado)">
+                    {topRecords.length > 0 ? (
+                        <View style={styles.prList}>
+                            {topRecords.map((record, index) => (
+                                <View key={record.exerciseId} style={styles.prItem}>
+                                    <View style={styles.prRank}>
+                                        <Text style={styles.prRankText}>#{index + 1}</Text>
                                     </View>
-                                )}
-                            />
-                        </View>
-                        <View style={styles.legendContainer}>
-                            {muscleGroupStats.slice(0, 5).map((stat) => (
-                                <View key={stat.muscleGroup} style={styles.legendItem}>
-                                    <View style={[styles.legendDot, { backgroundColor: stat.color }]} />
-                                    <Text style={styles.legendText}>{stat.muscleGroup}</Text>
-                                    <Text style={styles.legendValue}>{stat.sets}</Text>
+                                    <View style={styles.prInfo}>
+                                        <Text style={styles.prExercise}>{record.exerciseName}</Text>
+                                        <Text style={styles.prDetails}>
+                                            {record.weight}kg × {record.reps} reps
+                                        </Text>
+                                    </View>
+                                    <View style={styles.prValue}>
+                                        <Text style={styles.pr1RM}>{record.estimated1RM}</Text>
+                                        <Text style={styles.prUnit}>kg</Text>
+                                    </View>
                                 </View>
                             ))}
                         </View>
-                    </View>
-                ) : (
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyText}>
-                            Completa entrenamientos para ver tu distribución
-                        </Text>
-                    </View>
-                )}
-            </Card>
+                    ) : (
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyText}>
+                                Registra entrenamientos con peso para ver tus PRs
+                            </Text>
+                        </View>
+                    )}
+                </Card>
 
-            {/* Personal Records - 1RM */}
-            <Card title="Records Personales 🏆 (1RM Estimado)">
-                {topRecords.length > 0 ? (
-                    <View style={styles.prList}>
-                        {topRecords.map((record, index) => (
-                            <View key={record.exerciseId} style={styles.prItem}>
-                                <View style={styles.prRank}>
-                                    <Text style={styles.prRankText}>#{index + 1}</Text>
-                                </View>
-                                <View style={styles.prInfo}>
-                                    <Text style={styles.prExercise}>{record.exerciseName}</Text>
-                                    <Text style={styles.prDetails}>
-                                        {record.weight}kg × {record.reps} reps
-                                    </Text>
-                                </View>
-                                <View style={styles.prValue}>
-                                    <Text style={styles.pr1RM}>{record.estimated1RM}</Text>
-                                    <Text style={styles.prUnit}>kg</Text>
-                                </View>
-                            </View>
-                        ))}
+                {/* Overall Stats */}
+                <Card title="Estadísticas Generales">
+                    <View style={styles.statsGrid}>
+                        <View style={styles.statItem}>
+                            <Ionicons name="fitness" size={24} color={COLORS.primary} style={styles.statIcon} />
+                            <Text style={styles.statValue}>{stats.totalWorkouts}</Text>
+                            <Text style={styles.statLabel}>Entrenamientos</Text>
+                        </View>
+                        <View style={styles.statItem}>
+                            <Ionicons name="layers" size={24} color={COLORS.success} style={styles.statIcon} />
+                            <Text style={styles.statValue}>{stats.totalSets}</Text>
+                            <Text style={styles.statLabel}>Series</Text>
+                        </View>
+                        <View style={styles.statItem}>
+                            <Ionicons name="barbell" size={24} color={COLORS.warning} style={styles.statIcon} />
+                            <Text style={styles.statValue}>{formatVolume(stats.totalVolume)}</Text>
+                            <Text style={styles.statLabel}>Volumen</Text>
+                        </View>
+                        <View style={styles.statItem}>
+                            <Ionicons name="time" size={24} color={COLORS.info} style={styles.statIcon} />
+                            <Text style={styles.statValue}>{formatHours(stats.totalMinutes)}</Text>
+                            <Text style={styles.statLabel}>Tiempo</Text>
+                        </View>
                     </View>
-                ) : (
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyText}>
-                            Registra entrenamientos con peso para ver tus PRs
-                        </Text>
-                    </View>
-                )}
-            </Card>
-
-            {/* Overall Stats */}
-            <Card title="Estadísticas Generales">
-                <View style={styles.statsGrid}>
-                    <View style={styles.statItem}>
-                        <Ionicons name="fitness" size={24} color={COLORS.primary} style={styles.statIcon} />
-                        <Text style={styles.statValue}>{stats.totalWorkouts}</Text>
-                        <Text style={styles.statLabel}>Entrenamientos</Text>
-                    </View>
-                    <View style={styles.statItem}>
-                        <Ionicons name="layers" size={24} color={COLORS.success} style={styles.statIcon} />
-                        <Text style={styles.statValue}>{stats.totalSets}</Text>
-                        <Text style={styles.statLabel}>Series</Text>
-                    </View>
-                    <View style={styles.statItem}>
-                        <Ionicons name="barbell" size={24} color={COLORS.warning} style={styles.statIcon} />
-                        <Text style={styles.statValue}>{formatVolume(stats.totalVolume)}</Text>
-                        <Text style={styles.statLabel}>Volumen</Text>
-                    </View>
-                    <View style={styles.statItem}>
-                        <Ionicons name="time" size={24} color={COLORS.info} style={styles.statIcon} />
-                        <Text style={styles.statValue}>{formatHours(stats.totalMinutes)}</Text>
-                        <Text style={styles.statLabel}>Tiempo</Text>
-                    </View>
-                </View>
-            </Card>
-        </ScrollView>
+                </Card>
+            </ScrollView>
+        </View >
     );
 }
 
@@ -345,34 +369,50 @@ const styles = StyleSheet.create({
     content: {
         padding: SPACING.md,
         paddingBottom: SPACING.xxl,
+        gap: SPACING.lg, // Added gap between cards
     },
-    calendarLink: {
+    header: {
+        paddingHorizontal: SPACING.lg,
+        paddingTop: SPACING.xl,
+        paddingBottom: SPACING.lg,
+    },
+    headerContent: {
         flexDirection: 'row',
-        alignItems: 'center',
         justifyContent: 'space-between',
-        backgroundColor: COLORS.surface,
-        borderRadius: BORDER_RADIUS.lg,
-        padding: SPACING.md,
-        marginBottom: SPACING.lg,
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
-    },
-    calendarLinkContent: {
-        flexDirection: 'row',
         alignItems: 'center',
-        gap: SPACING.md,
     },
-    calendarLinkText: {
+    headerTextContainer: {
         flex: 1,
     },
-    calendarLinkTitle: {
-        fontSize: FONT_SIZES.md,
-        fontWeight: '600',
+    headerSubtitle: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: COLORS.primary,
+        letterSpacing: 3,
+        marginBottom: 4,
+        textTransform: 'uppercase',
+    },
+    headerTitle: {
+        fontSize: 36,
+        fontWeight: '800',
         color: COLORS.textPrimary,
     },
-    calendarLinkSub: {
-        fontSize: FONT_SIZES.sm,
-        color: COLORS.textSecondary,
+    headerButtons: {
+        flexDirection: 'row',
+        gap: SPACING.sm,
+    },
+    headerBtnSecondary: {
+        borderRadius: 14,
+        overflow: 'hidden',
+    },
+    headerBtnGradient: {
+        width: 48,
+        height: 48,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    scrollView: {
+        flex: 1,
     },
     chartContainer: {
         alignItems: 'center',
@@ -389,50 +429,63 @@ const styles = StyleSheet.create({
         color: COLORS.textSecondary,
     },
     // Pie Chart Styles
-    pieChartSection: {
-        flexDirection: 'row',
+    pieContainer: {
         alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingVertical: SPACING.md,
-    },
-    pieChartContainer: {
-        flex: 1,
-        alignItems: 'center',
+        marginVertical: SPACING.md,
     },
     pieCenter: {
         alignItems: 'center',
+        justifyContent: 'center',
+        width: 150,
+        height: 150,
     },
     pieCenterValue: {
-        fontSize: FONT_SIZES.lg,
-        fontWeight: '700',
+        fontSize: 32,
+        fontWeight: '800',
         color: COLORS.textPrimary,
+        textShadowColor: 'rgba(0,0,0,0.5)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 4,
     },
     pieCenterLabel: {
         fontSize: FONT_SIZES.xs,
         color: COLORS.textSecondary,
+        textTransform: 'uppercase',
+        letterSpacing: 2,
+        fontWeight: '600',
+        marginTop: 4,
     },
     legendContainer: {
-        flex: 1,
-        gap: SPACING.xs,
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        gap: SPACING.sm,
+        marginTop: SPACING.md,
     },
-    legendItem: {
+    legendItemChip: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: SPACING.sm,
+        backgroundColor: COLORS.surfaceLight,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: BORDER_RADIUS.full,
+        gap: 6,
+        borderWidth: 1,
+        borderColor: COLORS.surfaceHighlight,
     },
     legendDot: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
     },
     legendText: {
-        flex: 1,
-        fontSize: FONT_SIZES.sm,
+        fontSize: FONT_SIZES.xs,
         color: COLORS.textSecondary,
+        fontWeight: '600',
     },
     legendValue: {
-        fontSize: FONT_SIZES.sm,
-        fontWeight: '600',
+        fontSize: FONT_SIZES.xs,
+        fontWeight: '700',
         color: COLORS.textPrimary,
     },
     // PR List Styles

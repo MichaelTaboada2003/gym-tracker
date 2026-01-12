@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { BodyWeightWidget } from '../../components/home/BodyWeightWidget';
 import { GradientText } from '../../components/ui/GradientText';
 import { supabase } from '../../lib/supabase';
 
@@ -150,131 +151,131 @@ export default function HomeScreen() {
     };
 
     return (
-        <ScrollView
-            style={styles.container}
-            contentContainerStyle={styles.content}
-            refreshControl={
-                <RefreshControl refreshing={loading} onRefresh={fetchHomeData} tintColor={COLORS.primary} />
-            }
-        >
-            {/* Hero Section */}
-            <View style={styles.heroSection}>
-                <View>
-                    <Text style={styles.greetingSub}>Bienvenido de nuevo</Text>
-                    <GradientText style={styles.greetingTitle} colors={COLORS.gradients.primary}>
-                        ¡A Entrenar!
-                    </GradientText>
-                </View>
-                <View style={styles.streakBadge}>
-                    <Ionicons name="flame" size={20} color={COLORS.warning} />
-                    <Text style={styles.streakText}>{stats.streak} días</Text>
-                </View>
-            </View>
-
-            {/* Quick Actions Card */}
+        <View style={styles.container}>
+            {/* Header with Gradient */}
             <LinearGradient
-                colors={['#1E1E2E', '#2D2D44']}
-                style={styles.actionCard}
+                colors={[COLORS.primary + '15', 'transparent']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
+                style={styles.header}
             >
-                <View style={styles.actionContent}>
-                    <View>
-                        <Text style={styles.actionTitle}>Rutina de Hoy</Text>
-                        <Text style={styles.actionSubtitle}>No hay rutina programada</Text>
+                <View style={styles.headerContent}>
+                    <View style={styles.headerTextContainer}>
+                        <Text style={styles.headerSubtitle}>HOLA DE NUEVO</Text>
+                        <Text style={styles.headerTitle}>Resumen</Text>
                     </View>
-                    <Button
-                        title="Iniciar"
-                        onPress={() => router.push('/workout')}
-                        variant="gradient"
-                        size="md"
-                        icon={<Ionicons name="play" size={18} color="#FFF" />}
-                    />
+                    <View style={styles.headerButtons}>
+                        <View style={styles.streakBadgeContainer}>
+                            <LinearGradient
+                                colors={['#F59E0B20', '#F59E0B10']}
+                                style={styles.streakBadgeGradient}
+                            >
+                                <Ionicons name="flame" size={20} color={COLORS.warning} />
+                                <Text style={styles.streakText}>{stats.streak}</Text>
+                            </LinearGradient>
+                        </View>
+                    </View>
                 </View>
             </LinearGradient>
 
-            {/* Stats Overview */}
-            <Text style={styles.sectionTitle}>Tu Progreso Semanal</Text>
-            <View style={styles.statsGrid}>
-                <View style={styles.statItem}>
-                    <LinearGradient
-                        colors={COLORS.gradients.glass}
-                        style={styles.statGradient}
-                    >
-                        <Ionicons name="barbell-outline" size={24} color={COLORS.primaryLight} />
-                        <Text style={styles.statValue}>{stats.thisWeek}</Text>
-                        <Text style={styles.statLabel}>Sessions</Text>
-                    </LinearGradient>
-                </View>
+            <ScrollView
+                style={styles.scrollView}
+                contentContainerStyle={styles.content}
+                refreshControl={
+                    <RefreshControl refreshing={loading} onRefresh={fetchHomeData} tintColor={COLORS.primary} />
+                }
+            >
 
-                <View style={styles.statItem}>
-                    <LinearGradient
-                        colors={COLORS.gradients.glass}
-                        style={styles.statGradient}
-                    >
-                        <Ionicons name="layers-outline" size={24} color={COLORS.secondaryLight} />
-                        <Text style={styles.statValue}>{stats.totalWorkouts}</Text>
-                        <Text style={styles.statLabel}>Total</Text>
-                    </LinearGradient>
-                </View>
 
-                <View style={styles.statItem}>
-                    <LinearGradient
-                        colors={COLORS.gradients.glass}
-                        style={styles.statGradient}
-                    >
-                        <Ionicons name="trending-up-outline" size={24} color={COLORS.success} />
-                        <Text style={styles.statValue}>{formatVolume(stats.totalVolume)}</Text>
-                        <Text style={styles.statLabel}>Volumen</Text>
-                    </LinearGradient>
-                </View>
-            </View>
 
-            {/* Recent Activity */}
-            <Text style={styles.sectionTitle}>Actividad Reciente</Text>
-            <Card variant="glass" style={styles.recentCard}>
-                {recentWorkouts.length === 0 ? (
-                    <View style={styles.emptyState}>
-                        <View style={styles.iconCircle}>
-                            <Ionicons name="analytics-outline" size={32} color={COLORS.textMuted} />
-                        </View>
-                        <Text style={styles.emptyText}>
-                            Aún no hay registros recientes.
-                        </Text>
-                        <Button
-                            title="Ver Historial"
-                            variant="ghost"
-                            size="sm"
-                            onPress={() => router.push('/stats')}
-                        />
+                {/* Stats Overview */}
+                <Text style={styles.sectionTitle}>Tu Progreso Semanal</Text>
+                <View style={styles.statsGrid}>
+                    <View style={styles.statItem}>
+                        <LinearGradient
+                            colors={COLORS.gradients.glass}
+                            style={styles.statGradient}
+                        >
+                            <Ionicons name="barbell-outline" size={24} color={COLORS.primaryLight} />
+                            <Text style={styles.statValue}>{stats.thisWeek}</Text>
+                            <Text style={styles.statLabel}>Sessions</Text>
+                        </LinearGradient>
                     </View>
-                ) : (
-                    <View style={styles.recentList}>
-                        {recentWorkouts.map((workout) => (
-                            <View key={workout.id} style={styles.recentItem}>
-                                <View style={styles.recentIcon}>
-                                    <Ionicons name="fitness" size={20} color={COLORS.primary} />
-                                </View>
-                                <View style={styles.recentInfo}>
-                                    <Text style={styles.recentName}>
-                                        {workout.routineName || 'Entrenamiento Libre'}
-                                    </Text>
-                                    <Text style={styles.recentMeta}>
-                                        {formatDate(workout.date)} • {workout.sets} series • {workout.duration} min
-                                    </Text>
-                                </View>
+
+                    <View style={styles.statItem}>
+                        <LinearGradient
+                            colors={COLORS.gradients.glass}
+                            style={styles.statGradient}
+                        >
+                            <Ionicons name="layers-outline" size={24} color={COLORS.secondaryLight} />
+                            <Text style={styles.statValue}>{stats.totalWorkouts}</Text>
+                            <Text style={styles.statLabel}>Total</Text>
+                        </LinearGradient>
+                    </View>
+
+                    <View style={styles.statItem}>
+                        <LinearGradient
+                            colors={COLORS.gradients.glass}
+                            style={styles.statGradient}
+                        >
+                            <Ionicons name="trending-up-outline" size={24} color={COLORS.success} />
+                            <Text style={styles.statValue}>{formatVolume(stats.totalVolume)}</Text>
+                            <Text style={styles.statLabel}>Volumen</Text>
+                        </LinearGradient>
+                    </View>
+                </View>
+
+                {/* Body Weight Widget */}
+                <View style={{ marginTop: SPACING.xl }}>
+                    <BodyWeightWidget />
+                </View>
+
+                {/* Recent Activity */}
+                <Text style={styles.sectionTitle}>Actividad Reciente</Text>
+                <Card variant="glass" style={styles.recentCard}>
+                    {recentWorkouts.length === 0 ? (
+                        <View style={styles.emptyState}>
+                            <View style={styles.iconCircle}>
+                                <Ionicons name="analytics-outline" size={32} color={COLORS.textMuted} />
                             </View>
-                        ))}
-                        <Button
-                            title="Ver Historial"
-                            variant="ghost"
-                            size="sm"
-                            onPress={() => router.push('/stats')}
-                        />
-                    </View>
-                )}
-            </Card>
-        </ScrollView>
+                            <Text style={styles.emptyText}>
+                                Aún no hay registros recientes.
+                            </Text>
+                            <Button
+                                title="Ver Historial"
+                                variant="ghost"
+                                size="sm"
+                                onPress={() => router.push('/stats')}
+                            />
+                        </View>
+                    ) : (
+                        <View style={styles.recentList}>
+                            {recentWorkouts.map((workout) => (
+                                <View key={workout.id} style={styles.recentItem}>
+                                    <View style={styles.recentIcon}>
+                                        <Ionicons name="fitness" size={20} color={COLORS.primary} />
+                                    </View>
+                                    <View style={styles.recentInfo}>
+                                        <Text style={styles.recentName}>
+                                            {workout.routineName || 'Entrenamiento Libre'}
+                                        </Text>
+                                        <Text style={styles.recentMeta}>
+                                            {formatDate(workout.date)} • {workout.sets} series • {workout.duration} min
+                                        </Text>
+                                    </View>
+                                </View>
+                            ))}
+                            <Button
+                                title="Ver Historial"
+                                variant="ghost"
+                                size="sm"
+                                onPress={() => router.push('/stats')}
+                            />
+                        </View>
+                    )}
+                </Card>
+            </ScrollView>
+        </View>
     );
 }
 
@@ -287,37 +288,57 @@ const styles = StyleSheet.create({
         padding: SPACING.lg,
         paddingBottom: 100, // Space for tab bar
     },
-    heroSection: {
+    header: {
+        paddingHorizontal: SPACING.lg,
+        paddingTop: SPACING.xl,
+        paddingBottom: SPACING.lg,
+    },
+    headerContent: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: SPACING.xl,
-        marginTop: SPACING.md,
     },
-    greetingSub: {
-        fontSize: FONT_SIZES.md,
-        color: COLORS.textSecondary,
-        marginBottom: SPACING.xs,
+    headerTextContainer: {
+        flex: 1,
     },
-    greetingTitle: {
-        fontSize: 34,
+    headerSubtitle: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: COLORS.primary,
+        letterSpacing: 3,
+        marginBottom: 4,
+        textTransform: 'uppercase',
+    },
+    headerTitle: {
+        fontSize: 36,
         fontWeight: '800',
+        color: COLORS.textPrimary,
     },
-    streakBadge: {
+    headerButtons: {
         flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: COLORS.surfaceLight,
+        gap: SPACING.sm,
+    },
+    streakBadgeContainer: {
+        borderRadius: 14,
+        overflow: 'hidden',
+    },
+    streakBadgeGradient: {
+        height: 48,
         paddingHorizontal: SPACING.md,
-        paddingVertical: SPACING.xs,
-        borderRadius: BORDER_RADIUS.full,
-        gap: SPACING.xs,
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexDirection: 'row',
+        gap: 4,
         borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
+        borderColor: COLORS.warning + '30',
     },
     streakText: {
-        color: COLORS.textPrimary,
-        fontWeight: '600',
-        fontSize: FONT_SIZES.sm,
+        color: COLORS.warning,
+        fontWeight: '700',
+        fontSize: FONT_SIZES.md,
+    },
+    scrollView: {
+        flex: 1,
     },
     actionCard: {
         borderRadius: BORDER_RADIUS.xl,

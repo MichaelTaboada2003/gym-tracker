@@ -1,6 +1,7 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Vibration } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES } from '../../constants/colors';
 import { Exercise } from '../../lib/database.types';
 import { SetData } from '../../store/workoutStore';
@@ -12,6 +13,7 @@ interface ExerciseCardProps {
     exercise: Exercise;
     sets: SetData[];
     previousBest: { weight: number; reps: number } | null;
+    restSeconds?: number;
     onUpdateSet: (setIndex: number, data: Partial<SetData>) => void;
     onCompleteSet: (setIndex: number) => void;
     onAddSet: () => void;
@@ -19,10 +21,28 @@ interface ExerciseCardProps {
     onRemoveExercise: () => void;
 }
 
+// Format seconds to mm:ss
+const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+// Format rest time for display
+const formatRestDisplay = (seconds: number): string => {
+    if (seconds >= 60) {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return secs > 0 ? `${mins}m ${secs}s` : `${mins} min`;
+    }
+    return `${seconds}s`;
+};
+
 export function ExerciseCard({
     exercise,
     sets,
     previousBest,
+    restSeconds = 90,
     onUpdateSet,
     onCompleteSet,
     onAddSet,
@@ -32,8 +52,68 @@ export function ExerciseCard({
     const completedSets = sets.filter((s) => s.isCompleted && !s.isWarmup).length;
     const totalWorkSets = sets.filter((s) => !s.isWarmup).length;
 
+    // Rest timer state
+    const [isResting, setIsResting] = useState(false);
+    const [restTimeLeft, setRestTimeLeft] = useState(restSeconds);
+    const timerRef = useRef<NodeJS.Timeout | null>(null);
+
     // Calculate progress percentage
     const progress = totalWorkSets > 0 ? (completedSets / totalWorkSets) * 100 : 0;
+
+    // Start rest timer
+    const startRestTimer = () => {
+        setIsResting(true);
+        setRestTimeLeft(restSeconds);
+    };
+
+    // Stop rest timer
+    const stopRestTimer = () => {
+        setIsResting(false);
+        if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+        }
+    };
+
+    // Add/subtract time
+    const adjustRestTime = (delta: number) => {
+        setRestTimeLeft(prev => Math.max(0, prev + delta));
+    };
+
+    // Handle rest timer countdown
+    useEffect(() => {
+        if (isResting && restTimeLeft > 0) {
+            timerRef.current = setInterval(() => {
+                setRestTimeLeft(prev => {
+                    if (prev <= 1) {
+                        // Timer finished
+                        Vibration.vibrate([0, 500, 200, 500]); // Vibrate pattern
+                        setIsResting(false);
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+        }
+
+        return () => {
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
+        };
+    }, [isResting]);
+
+    // Calculate timer progress
+    const timerProgress = restSeconds > 0 ? (restTimeLeft / restSeconds) * 100 : 0;
+
+    // Handle set completion - start rest timer
+    const handleCompleteSet = (setIndex: number) => {
+        onCompleteSet(setIndex);
+        // Auto-start rest timer after completing a set
+        if (!isResting) {
+            startRestTimer();
+        }
+    };
 
     return (
         <View style={styles.container}>
@@ -55,6 +135,68 @@ export function ExerciseCard({
             <View style={styles.progressBarContainer}>
                 <View style={[styles.progressBar, { width: `${progress}%` }]} />
             </View>
+
+            {/* Rest Time Indicator / Timer */}
+            {isResting ? (
+                <View style={styles.restTimerActive}>
+                    <LinearGradient
+                        colors={[COLORS.warning + '20', COLORS.warning + '10']}
+                        style={styles.restTimerGradient}
+                    >
+                        {/* Timer progress bar */}
+                        <View style={styles.timerProgressBg}>
+                            <View style={[styles.timerProgress, { width: `${timerProgress}%` }]} />
+                        </View>
+
+                        <View style={styles.restTimerContent}>
+                            <View style={styles.restTimerLeft}>
+                                <Ionicons name="hourglass" size={18} color={COLORS.warning} />
+                                <Text style={styles.restTimerLabel}>Descanso</Text>
+                            </View>
+
+                            <View style={styles.restTimerCenter}>
+                                <TouchableOpacity
+                                    style={styles.timerAdjustBtn}
+                                    onPress={() => adjustRestTime(-15)}
+                                >
+                                    <Ionicons name="remove" size={16} color={COLORS.textSecondary} />
+                                </TouchableOpacity>
+
+                                <Text style={styles.restTimerTime}>{formatTime(restTimeLeft)}</Text>
+
+                                <TouchableOpacity
+                                    style={styles.timerAdjustBtn}
+                                    onPress={() => adjustRestTime(15)}
+                                >
+                                    <Ionicons name="add" size={16} color={COLORS.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <TouchableOpacity
+                                style={styles.skipRestBtn}
+                                onPress={stopRestTimer}
+                            >
+                                <Ionicons name="play-skip-forward" size={16} color={COLORS.primary} />
+                                <Text style={styles.skipRestText}>Saltar</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </LinearGradient>
+                </View>
+            ) : (
+                <TouchableOpacity
+                    style={styles.restTimeIndicator}
+                    onPress={startRestTimer}
+                >
+                    <Ionicons name="hourglass-outline" size={14} color={COLORS.warning} />
+                    <Text style={styles.restTimeText}>
+                        Descanso: <Text style={styles.restTimeValue}>{formatRestDisplay(restSeconds)}</Text>
+                    </Text>
+                    <View style={styles.startTimerHint}>
+                        <Ionicons name="play" size={10} color={COLORS.textMuted} />
+                        <Text style={styles.startTimerHintText}>iniciar</Text>
+                    </View>
+                </TouchableOpacity>
+            )}
 
             {/* Target & Notes Info */}
             {(exercise as any).notes && (
@@ -100,7 +242,7 @@ export function ExerciseCard({
                         previousWeight={previousBest?.weight}
                         previousReps={previousBest?.reps}
                         onUpdate={(data) => onUpdateSet(index, data)}
-                        onComplete={() => onCompleteSet(index)}
+                        onComplete={() => handleCompleteSet(index)}
                         onDelete={() => onRemoveSet(index)}
                     />
                 ))}
@@ -150,13 +292,119 @@ const styles = StyleSheet.create({
         height: 4,
         backgroundColor: COLORS.surfaceLight,
         borderRadius: 2,
-        marginBottom: SPACING.md,
+        marginBottom: SPACING.sm,
         overflow: 'hidden',
     },
     progressBar: {
         height: '100%',
         backgroundColor: COLORS.success,
     },
+    // Rest Time Indicator (inactive)
+    restTimeIndicator: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: COLORS.warning + '10',
+        paddingHorizontal: SPACING.sm,
+        paddingVertical: SPACING.xs,
+        borderRadius: BORDER_RADIUS.sm,
+        marginBottom: SPACING.sm,
+        gap: 6,
+        borderWidth: 1,
+        borderColor: COLORS.warning + '20',
+    },
+    restTimeText: {
+        flex: 1,
+        fontSize: FONT_SIZES.sm,
+        color: COLORS.textSecondary,
+    },
+    restTimeValue: {
+        fontWeight: '600',
+        color: COLORS.warning,
+    },
+    startTimerHint: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 2,
+        backgroundColor: COLORS.surfaceLight,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: BORDER_RADIUS.sm,
+    },
+    startTimerHintText: {
+        fontSize: 10,
+        color: COLORS.textMuted,
+    },
+    // Rest Timer Active
+    restTimerActive: {
+        marginBottom: SPACING.sm,
+        borderRadius: BORDER_RADIUS.md,
+        overflow: 'hidden',
+    },
+    restTimerGradient: {
+        padding: SPACING.sm,
+    },
+    timerProgressBg: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 4,
+        backgroundColor: COLORS.surfaceLight,
+    },
+    timerProgress: {
+        height: '100%',
+        backgroundColor: COLORS.warning,
+    },
+    restTimerContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    restTimerLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    restTimerLabel: {
+        fontSize: FONT_SIZES.sm,
+        fontWeight: '600',
+        color: COLORS.warning,
+    },
+    restTimerCenter: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.sm,
+    },
+    timerAdjustBtn: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: COLORS.surfaceLight,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    restTimerTime: {
+        fontSize: 24,
+        fontWeight: '800',
+        color: COLORS.warning,
+        minWidth: 70,
+        textAlign: 'center',
+    },
+    skipRestBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        backgroundColor: COLORS.primary + '20',
+        paddingHorizontal: SPACING.sm,
+        paddingVertical: 6,
+        borderRadius: BORDER_RADIUS.sm,
+    },
+    skipRestText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: COLORS.primary,
+    },
+    // Notes
     notesContainer: {
         flexDirection: 'row',
         backgroundColor: COLORS.surfaceLight,

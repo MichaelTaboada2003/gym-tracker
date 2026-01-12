@@ -84,7 +84,7 @@ export function Button({
         </>
     );
 
-    if (isGradient && !disabled && variant !== 'ghost') {
+    if (isGradient && !disabled) {
         return (
             <TouchableOpacity onPress={onPress} disabled={loading} activeOpacity={0.8} style={buttonBaseStyle}>
                 <LinearGradient

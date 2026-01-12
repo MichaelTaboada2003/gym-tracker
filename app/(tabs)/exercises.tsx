@@ -9,6 +9,7 @@ import {
     Modal,
     RefreshControl,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
 import { Card } from '../../components/ui/Card';
@@ -146,17 +147,33 @@ export default function ExercisesScreen() {
 
     return (
         <View style={styles.container}>
-            {/* Header */}
-            <View style={styles.header}>
-                <GradientText style={styles.headerTitle} colors={COLORS.gradients.primary}>
-                    Ejercicios
-                </GradientText>
-                <IconButton
-                    icon={<Ionicons name="add" size={24} color="#FFF" />}
-                    variant="primary"
-                    onPress={openCreateModal}
-                />
-            </View>
+            {/* Header with Gradient */}
+            <LinearGradient
+                colors={[COLORS.primary + '15', 'transparent']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.header}
+            >
+                <View style={styles.headerContent}>
+                    <View style={styles.headerTextContainer}>
+                        <Text style={styles.headerSubtitle}>EXPLORA TUS</Text>
+                        <Text style={styles.headerTitle}>Ejercicios</Text>
+                    </View>
+                    <View style={styles.headerButtons}>
+                        <TouchableOpacity
+                            style={styles.headerBtnPrimary}
+                            onPress={openCreateModal}
+                        >
+                            <LinearGradient
+                                colors={COLORS.gradients.primary}
+                                style={styles.headerBtnGradient}
+                            >
+                                <Ionicons name="add" size={22} color="#FFF" />
+                            </LinearGradient>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </LinearGradient>
 
             {/* Search */}
             <View style={styles.searchContainer}>
@@ -178,29 +195,44 @@ export default function ExercisesScreen() {
                 contentContainerStyle={styles.filterContent}
             >
                 <TouchableOpacity
-                    style={[styles.filterChip, !selectedMuscle && styles.filterChipActive]}
                     onPress={() => setSelectedMuscle(null)}
+                    style={styles.filterChipWrapper}
                 >
-                    <Text style={[styles.filterText, !selectedMuscle && styles.filterTextActive]}>
-                        Todos
-                    </Text>
+                    {!selectedMuscle ? (
+                        <LinearGradient
+                            colors={['#8B5CF6', '#6D28D9']}
+                            style={styles.filterChipActive}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                        >
+                            <Text style={styles.filterTextActive}>Todos</Text>
+                        </LinearGradient>
+                    ) : (
+                        <View style={styles.filterChip}>
+                            <Text style={styles.filterText}>Todos</Text>
+                        </View>
+                    )}
                 </TouchableOpacity>
                 {MUSCLE_GROUPS.map(muscle => (
                     <TouchableOpacity
                         key={muscle}
-                        style={[
-                            styles.filterChip,
-                            selectedMuscle === muscle && styles.filterChipActive,
-                            selectedMuscle === muscle && { backgroundColor: getMuscleColor(muscle) }
-                        ]}
                         onPress={() => setSelectedMuscle(selectedMuscle === muscle ? null : muscle)}
+                        style={styles.filterChipWrapper}
                     >
-                        <Text style={[
-                            styles.filterText,
-                            selectedMuscle === muscle && styles.filterTextActive
-                        ]}>
-                            {muscle}
-                        </Text>
+                        {selectedMuscle === muscle ? (
+                            <LinearGradient
+                                colors={['#8B5CF6', '#6D28D9']}
+                                style={styles.filterChipActive}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                            >
+                                <Text style={styles.filterTextActive}>{muscle}</Text>
+                            </LinearGradient>
+                        ) : (
+                            <View style={styles.filterChip}>
+                                <Text style={styles.filterText}>{muscle}</Text>
+                            </View>
+                        )}
                     </TouchableOpacity>
                 ))}
             </ScrollView>
@@ -401,16 +433,44 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.background,
     },
     header: {
+        paddingHorizontal: SPACING.lg,
+        paddingTop: SPACING.xl,
+        paddingBottom: SPACING.lg,
+    },
+    headerContent: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: SPACING.lg,
-        paddingTop: SPACING.xl,
-        paddingBottom: SPACING.md,
+    },
+    headerTextContainer: {
+        flex: 1,
+    },
+    headerSubtitle: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: COLORS.primary,
+        letterSpacing: 3,
+        marginBottom: 4,
+        textTransform: 'uppercase',
     },
     headerTitle: {
-        fontSize: 28,
+        fontSize: 36,
         fontWeight: '800',
+        color: COLORS.textPrimary,
+    },
+    headerButtons: {
+        flexDirection: 'row',
+        gap: SPACING.sm,
+    },
+    headerBtnPrimary: {
+        borderRadius: 14,
+        overflow: 'hidden',
+    },
+    headerBtnGradient: {
+        width: 48,
+        height: 48,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     searchContainer: {
         flexDirection: 'row',
@@ -436,17 +496,31 @@ const styles = StyleSheet.create({
     },
     filterContent: {
         paddingHorizontal: SPACING.lg,
-        gap: SPACING.sm,
+        gap: 8,
+        paddingBottom: 4,
+    },
+    filterChipWrapper: {
+        borderRadius: BORDER_RADIUS.full,
+        overflow: 'hidden',
     },
     filterChip: {
-        paddingHorizontal: SPACING.md,
-        paddingVertical: SPACING.xs,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
         borderRadius: BORDER_RADIUS.full,
         backgroundColor: COLORS.surface,
-        marginRight: SPACING.sm,
+        borderWidth: 1,
+        borderColor: COLORS.surfaceHighlight,
+        minWidth: 70,
+        alignItems: 'center',
     },
     filterChipActive: {
-        backgroundColor: COLORS.primary,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: BORDER_RADIUS.full,
+        minWidth: 70,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
     },
     filterText: {
         color: COLORS.textSecondary,
@@ -455,6 +529,11 @@ const styles = StyleSheet.create({
     },
     filterTextActive: {
         color: '#FFF',
+        fontSize: FONT_SIZES.sm,
+        fontWeight: '700',
+        textShadowColor: 'rgba(0,0,0,0.2)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 2,
     },
     list: {
         flex: 1,
