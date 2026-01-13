@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { storage } from '../lib/localDatabase';
 import {
     calculateVolumeByMuscleGroup,
     calculateEstimated1RM,
@@ -64,33 +64,31 @@ export function useAdvancedStats() {
         try {
             setStats(prev => ({ ...prev, loading: true, error: null }));
 
-            // Fetch all sessions
-            const { data: sessionsData, error: sessionsError } = await supabase
-                .from('workout_sessions')
-                .select('id, session_date, duration_minutes, routine_id')
-                .order('session_date', { ascending: false });
+            // Fetch all sessions from AsyncStorage
+            const sessionsData = await storage.workoutSessions.getAll() as any[];
+            const logsData = await storage.workoutLogs.getAll() as any[];
+            const exercisesData = await storage.exercises.getAll() as any[];
 
-            if (sessionsError) throw sessionsError;
+            // Map log data to include exercise info
+            const logs: WorkoutLog[] = logsData.map(log => {
+                const exercise = exercisesData.find(e => e.id === log.exercise_id);
+                return {
+                    ...log,
+                    is_warmup: log.is_warmup === 1 || log.is_warmup === true,
+                    exercise: exercise ? {
+                        id: exercise.id,
+                        name: exercise.name,
+                        muscle_group: exercise.muscle_group,
+                    } : null,
+                };
+            });
 
-            // Fetch all logs with exercise info
-            const { data: logsData, error: logsError } = await supabase
-                .from('workout_logs')
-                .select(`
-                    id,
-                    session_id,
-                    exercise_id,
-                    set_number,
-                    weight_kg,
-                    reps,
-                    is_warmup,
-                    logged_at,
-                    exercise:exercises(id, name, muscle_group)
-                `);
-
-            if (logsError) throw logsError;
-
-            const logs = (logsData || []) as unknown as WorkoutLog[];
-            const sessionsList = (sessionsData || []) as WorkoutSession[];
+            const sessionsList: WorkoutSession[] = sessionsData.map(s => ({
+                id: s.id,
+                session_date: s.session_date,
+                duration_minutes: s.duration_minutes,
+                routine_id: s.routine_id,
+            }));
 
             setSessions(sessionsList);
             setAllLogs(logs);

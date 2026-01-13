@@ -8,7 +8,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { BodyWeightWidget } from '../../components/home/BodyWeightWidget';
 import { GradientText } from '../../components/ui/GradientText';
-import { supabase } from '../../lib/supabase';
+import { storage } from '../../lib/localDatabase';
 
 interface HomeStats {
     totalWorkouts: number;
@@ -40,23 +40,18 @@ export default function HomeScreen() {
         try {
             setLoading(true);
 
-            // Fetch all workout sessions
-            const { data: sessions, error: sessionsError } = await supabase
-                .from('workout_sessions')
-                .select('*, routine:routines(name)')
-                .order('session_date', { ascending: false });
+            // Fetch all workout sessions from AsyncStorage
+            const sessions = await storage.workoutSessions.getAll() as any[];
+            const logs = await storage.workoutLogs.getAll() as any[];
+            const routines = await storage.routines.getAll() as any[];
 
-            if (sessionsError) throw sessionsError;
-
-            // Fetch all workout logs for volume calculation
-            const { data: logs, error: logsError } = await supabase
-                .from('workout_logs')
-                .select('weight_kg, reps, is_warmup, session_id');
-
-            if (logsError) throw logsError;
+            // Sort sessions by date descending
+            const sortedSessions = sessions.sort((a, b) =>
+                new Date(b.session_date).getTime() - new Date(a.session_date).getTime()
+            );
 
             // Calculate total workouts
-            const totalWorkouts = sessions?.length || 0;
+            const totalWorkouts = sortedSessions.length;
 
             // Calculate this week's workouts
             const today = new Date();
@@ -65,22 +60,18 @@ export default function HomeScreen() {
             startOfWeek.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
             startOfWeek.setHours(0, 0, 0, 0);
 
-            const thisWeek = sessions?.filter(s => {
+            const thisWeek = sortedSessions.filter(s => {
                 const sessionDate = new Date(s.session_date);
                 return sessionDate >= startOfWeek;
-            }).length || 0;
+            }).length;
 
-            // Calculate total volume
-            const workLogs = logs?.filter(l => !l.is_warmup) || [];
+            // Calculate total volume (excluding warmups)
+            const workLogs = logs.filter(l => l.is_warmup !== 1 && l.is_warmup !== true);
             const totalVolume = workLogs.reduce((sum, l) => sum + (Number(l.weight_kg) * l.reps), 0);
 
             // Calculate streak (simplified - consecutive days with workouts)
             let streak = 0;
-            if (sessions && sessions.length > 0) {
-                const sortedSessions = [...sessions].sort((a, b) =>
-                    new Date(b.session_date).getTime() - new Date(a.session_date).getTime()
-                );
-
+            if (sortedSessions.length > 0) {
                 const todayStr = today.toISOString().split('T')[0];
                 const yesterdayStr = new Date(today.getTime() - 86400000).toISOString().split('T')[0];
 
@@ -110,11 +101,12 @@ export default function HomeScreen() {
             });
 
             // Get recent workouts (last 3)
-            const recentData: RecentWorkout[] = (sessions?.slice(0, 3) || []).map(s => {
-                const sessionLogs = logs?.filter(l => l.session_id === s.id && !l.is_warmup) || [];
+            const recentData: RecentWorkout[] = sortedSessions.slice(0, 3).map(s => {
+                const routine = routines.find(r => r.id === s.routine_id);
+                const sessionLogs = logs.filter(l => l.session_id === s.id && l.is_warmup !== 1 && l.is_warmup !== true);
                 return {
                     id: s.id,
-                    routineName: s.routine?.name || null,
+                    routineName: routine?.name || null,
                     date: s.session_date,
                     duration: s.duration_minutes || 0,
                     sets: sessionLogs.length,

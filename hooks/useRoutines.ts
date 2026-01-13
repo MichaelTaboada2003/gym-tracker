@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db, generateId } from '../lib/localDatabase';
+import { storage, generateId } from '../lib/localDatabase';
 import { Routine, RoutineExercise } from '../lib/database.types';
 
 export type RoutineWithExercises = Routine & {
@@ -21,42 +21,36 @@ export function useRoutines() {
             setLoading(true);
 
             // 1. Fetch all routines
-            const routineRows = await db.getAllAsync<Routine>(
-                'SELECT * FROM routines ORDER BY created_at DESC;'
-            );
+            const routineRows = await storage.routines.getAll() as Routine[];
 
-            // 2. For each routine, fetch its exercises with exercise details
-            const routinesWithExercises: RoutineWithExercises[] = await Promise.all(
-                (routineRows || []).map(async (routine) => {
-                    const exerciseRows = await db.getAllAsync<
-                        RoutineExercise & { exercise_name: string; exercise_muscle_group: string }
-                    >(
-                        `SELECT re.*, e.name as exercise_name, e.muscle_group as exercise_muscle_group
-                         FROM routine_exercises re
-                         JOIN exercises e ON re.exercise_id = e.id
-                         WHERE re.routine_id = ?
-                         ORDER BY re.order_index;`,
-                        [routine.id]
-                    );
+            // 2. Fetch all routine_exercises and exercises
+            const allRoutineExercises = await storage.routineExercises.getAll() as any[];
+            const allExercises = await storage.exercises.getAll() as any[];
+
+            // 3. Build the joined data
+            const routinesWithExercises: RoutineWithExercises[] = routineRows
+                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                .map((routine) => {
+                    const exerciseLinks = allRoutineExercises
+                        .filter((re) => re.routine_id === routine.id)
+                        .sort((a, b) => a.order_index - b.order_index);
+
+                    const routineExercisesWithDetails = exerciseLinks.map((re) => {
+                        const exercise = allExercises.find((e) => e.id === re.exercise_id);
+                        return {
+                            ...re,
+                            exercise: exercise ? {
+                                name: exercise.name,
+                                muscle_group: exercise.muscle_group,
+                            } : { name: 'Desconocido', muscle_group: '' },
+                        };
+                    });
 
                     return {
                         ...routine,
-                        routine_exercises: (exerciseRows || []).map((row) => ({
-                            id: row.id,
-                            routine_id: row.routine_id,
-                            exercise_id: row.exercise_id,
-                            order_index: row.order_index,
-                            target_sets: row.target_sets,
-                            target_reps: row.target_reps,
-                            notes: row.notes,
-                            exercise: {
-                                name: row.exercise_name,
-                                muscle_group: row.exercise_muscle_group,
-                            },
-                        })),
+                        routine_exercises: routineExercisesWithDetails,
                     };
-                })
-            );
+                });
 
             setRoutines(routinesWithExercises);
         } catch (err) {
@@ -85,33 +79,33 @@ export function useRoutines() {
             }, 0);
 
             // 1. Create routine
-            await db.runAsync(
-                `INSERT INTO routines (id, name, description, estimated_duration, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?);`,
-                [routineId, name, description, Math.round(totalDuration), now, now]
-            );
+            const newRoutine: Routine = {
+                id: routineId,
+                name,
+                description,
+                estimated_duration: Math.round(totalDuration),
+                created_at: now,
+                updated_at: now,
+            };
+            await storage.routines.add(newRoutine);
 
             // 2. Add exercises
             for (let i = 0; i < exercises.length; i++) {
                 const ex = exercises[i];
-                const reId = generateId();
-                await db.runAsync(
-                    `INSERT INTO routine_exercises (id, routine_id, exercise_id, order_index, target_sets, target_reps, notes)
-                     VALUES (?, ?, ?, ?, ?, ?, ?);`,
-                    [
-                        reId,
-                        routineId,
-                        ex.id,
-                        i,
-                        ex.sets,
-                        ex.reps.toString(),
-                        ex.restTime ? JSON.stringify({ restTime: ex.restTime }) : null,
-                    ]
-                );
+                const routineExercise = {
+                    id: generateId(),
+                    routine_id: routineId,
+                    exercise_id: ex.id,
+                    order_index: i,
+                    target_sets: ex.sets,
+                    target_reps: ex.reps.toString(),
+                    notes: ex.restTime ? JSON.stringify({ restTime: ex.restTime }) : null,
+                };
+                await storage.routineExercises.add(routineExercise);
             }
 
             await fetchRoutines();
-            return { id: routineId, name, description, estimated_duration: Math.round(totalDuration) };
+            return newRoutine;
         } catch (err) {
             console.error('Error creating routine:', err);
             throw err;
@@ -138,31 +132,29 @@ export function useRoutines() {
             }, 0);
 
             // 1. Update routine metadata
-            await db.runAsync(
-                `UPDATE routines SET name = ?, description = ?, estimated_duration = ?, updated_at = ? WHERE id = ?;`,
-                [name, description, Math.round(totalDuration), now, id]
-            );
+            await storage.routines.update(id, {
+                name,
+                description,
+                estimated_duration: Math.round(totalDuration),
+                updated_at: now,
+            });
 
             // 2. Delete existing exercises
-            await db.runAsync('DELETE FROM routine_exercises WHERE routine_id = ?;', [id]);
+            await storage.routineExercises.deleteByRoutineId(id);
 
             // 3. Insert new exercises
             for (let i = 0; i < exercises.length; i++) {
                 const ex = exercises[i];
-                const reId = generateId();
-                await db.runAsync(
-                    `INSERT INTO routine_exercises (id, routine_id, exercise_id, order_index, target_sets, target_reps, notes)
-                     VALUES (?, ?, ?, ?, ?, ?, ?);`,
-                    [
-                        reId,
-                        id,
-                        ex.id,
-                        i,
-                        ex.sets,
-                        ex.reps.toString(),
-                        ex.restTime ? JSON.stringify({ restTime: ex.restTime }) : null,
-                    ]
-                );
+                const routineExercise = {
+                    id: generateId(),
+                    routine_id: id,
+                    exercise_id: ex.id,
+                    order_index: i,
+                    target_sets: ex.sets,
+                    target_reps: ex.reps.toString(),
+                    notes: ex.restTime ? JSON.stringify({ restTime: ex.restTime }) : null,
+                };
+                await storage.routineExercises.add(routineExercise);
             }
 
             await fetchRoutines();
@@ -176,11 +168,45 @@ export function useRoutines() {
 
     const deleteRoutine = async (id: string) => {
         try {
-            await db.runAsync('DELETE FROM routines WHERE id = ?;', [id]);
+            await storage.routineExercises.deleteByRoutineId(id);
+            await storage.routines.delete(id);
             setRoutines((prev) => prev.filter((r) => r.id !== id));
         } catch (err) {
             console.error('Error deleting routine:', err);
             throw err;
+        }
+    };
+
+    const getRoutineDetails = async (id: string): Promise<RoutineWithExercises | null> => {
+        try {
+            const routine = await storage.routines.getById(id) as Routine | null;
+            if (!routine) return null;
+
+            const allRoutineExercises = await storage.routineExercises.getAll() as any[];
+            const allExercises = await storage.exercises.getAll() as any[];
+
+            const exerciseLinks = allRoutineExercises
+                .filter((re) => re.routine_id === routine.id)
+                .sort((a, b) => a.order_index - b.order_index);
+
+            const routineExercisesWithDetails = exerciseLinks.map((re) => {
+                const exercise = allExercises.find((e) => e.id === re.exercise_id);
+                return {
+                    ...re,
+                    exercise: exercise ? {
+                        name: exercise.name,
+                        muscle_group: exercise.muscle_group,
+                    } : { name: 'Desconocido', muscle_group: '' },
+                };
+            });
+
+            return {
+                ...routine,
+                routine_exercises: routineExercisesWithDetails,
+            };
+        } catch (err) {
+            console.error('Error getting routine details:', err);
+            return null;
         }
     };
 
@@ -196,5 +222,6 @@ export function useRoutines() {
         createRoutine,
         updateRoutine,
         deleteRoutine,
+        getRoutineDetails,
     };
 }

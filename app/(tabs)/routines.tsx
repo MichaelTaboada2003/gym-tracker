@@ -72,6 +72,8 @@ export default function RoutinesScreen() {
         );
     };
 
+
+
     const renderRoutineCard = (routine: RoutineWithExercises) => {
         const muscleGroups = getMuscleGroups(routine);
         const totalSets = getTotalSets(routine);

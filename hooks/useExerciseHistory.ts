@@ -1,27 +1,72 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
-import { ExerciseHistory } from '../lib/database.types';
+import { storage } from '../lib/localDatabase';
+
+interface ExerciseHistoryEntry {
+    exercise_id: string;
+    exercise_name: string;
+    session_date: string;
+    set_number: number;
+    weight_kg: number;
+    reps: number;
+    rpe: number | null;
+    volume: number;
+    estimated_1rm: number;
+}
 
 export function useExerciseHistory(exerciseId: string) {
-    const [history, setHistory] = useState<ExerciseHistory[]>([]);
+    const [history, setHistory] = useState<ExerciseHistoryEntry[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Fetch history for an exercise
+    // Calculate estimated 1RM using Brzycki formula
+    const calculateEstimated1RM = (weight: number, reps: number): number => {
+        if (reps <= 0 || weight <= 0) return 0;
+        if (reps === 1) return weight;
+        return Math.round(weight * (36 / (37 - reps)));
+    };
+
+    // Fetch history for an exercise from AsyncStorage
     const fetchHistory = useCallback(async (limit = 30) => {
         if (!exerciseId) return;
 
         try {
             setLoading(true);
-            const { data, error } = await supabase
-                .from('exercise_history')
-                .select('*')
-                .eq('exercise_id', exerciseId)
-                .order('session_date', { ascending: false })
-                .limit(limit);
 
-            if (error) throw error;
-            setHistory(data || []);
+            // Get all workout logs
+            const allLogs = await storage.workoutLogs.getAll() as any[];
+            const allSessions = await storage.workoutSessions.getAll() as any[];
+            const allExercises = await storage.exercises.getAll() as any[];
+
+            // Filter logs for this exercise
+            const exerciseLogs = allLogs.filter(log => log.exercise_id === exerciseId);
+
+            // Build history entries with session date and exercise name
+            const exerciseInfo = allExercises.find(e => e.id === exerciseId);
+            const exerciseName = exerciseInfo?.name || 'Unknown';
+
+            const historyEntries: ExerciseHistoryEntry[] = exerciseLogs
+                .map(log => {
+                    const session = allSessions.find(s => s.id === log.session_id);
+                    const volume = log.weight_kg * log.reps;
+                    const estimated1rm = calculateEstimated1RM(log.weight_kg, log.reps);
+
+                    return {
+                        exercise_id: log.exercise_id,
+                        exercise_name: exerciseName,
+                        session_date: session?.session_date || '',
+                        set_number: log.set_number,
+                        weight_kg: log.weight_kg,
+                        reps: log.reps,
+                        rpe: log.rpe,
+                        volume,
+                        estimated_1rm: estimated1rm,
+                    };
+                })
+                .filter(entry => entry.session_date) // Remove entries without valid session
+                .sort((a, b) => new Date(b.session_date).getTime() - new Date(a.session_date).getTime())
+                .slice(0, limit);
+
+            setHistory(historyEntries);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Error loading history');
         } finally {

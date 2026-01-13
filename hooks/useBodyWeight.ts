@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { generateId } from '../lib/localDatabase';
+
+const BODY_WEIGHT_KEY = '@gym_tracker_body_weight';
 
 export interface WeightLog {
     id: string;
@@ -15,16 +18,17 @@ export const useBodyWeight = () => {
     const fetchWeightLogs = useCallback(async () => {
         try {
             setLoading(true);
-            const { data, error } = await supabase
-                .from('body_weight' as any)
-                .select('*')
-                .order('date', { ascending: false });
+            const data = await AsyncStorage.getItem(BODY_WEIGHT_KEY);
+            const logs: WeightLog[] = data ? JSON.parse(data) : [];
 
-            if (error) throw error;
+            // Sort by date descending
+            const sorted = logs.sort((a, b) =>
+                new Date(b.date).getTime() - new Date(a.date).getTime()
+            );
 
-            setWeightLogs(data || []);
-            if (data && data.length > 0) {
-                setCurrentWeight(data[0].weight_kg);
+            setWeightLogs(sorted);
+            if (sorted.length > 0) {
+                setCurrentWeight(sorted[0].weight_kg);
             }
         } catch (error) {
             console.error('Error fetching weight logs:', error);
@@ -35,22 +39,36 @@ export const useBodyWeight = () => {
 
     const addWeightLog = async (weight: number, date: string = new Date().toISOString().split('T')[0]) => {
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error('No user logged in');
+            const newLog: WeightLog = {
+                id: generateId(),
+                weight_kg: weight,
+                date: date,
+            };
 
-            const { error } = await supabase
-                .from('body_weight' as any)
-                .insert({
-                    user_id: user.id,
-                    weight_kg: weight,
-                    date: date
-                } as any);
-
-            if (error) throw error;
+            const updatedLogs = [...weightLogs, newLog];
+            await AsyncStorage.setItem(BODY_WEIGHT_KEY, JSON.stringify(updatedLogs));
             await fetchWeightLogs();
             return true;
         } catch (error) {
             console.error('Error adding weight log:', error);
+            return false;
+        }
+    };
+
+    const deleteWeightLog = async (id: string) => {
+        try {
+            const updatedLogs = weightLogs.filter(log => log.id !== id);
+            await AsyncStorage.setItem(BODY_WEIGHT_KEY, JSON.stringify(updatedLogs));
+            setWeightLogs(updatedLogs);
+
+            if (updatedLogs.length > 0) {
+                setCurrentWeight(updatedLogs[0].weight_kg);
+            } else {
+                setCurrentWeight(null);
+            }
+            return true;
+        } catch (error) {
+            console.error('Error deleting weight log:', error);
             return false;
         }
     };
@@ -64,6 +82,7 @@ export const useBodyWeight = () => {
         currentWeight,
         loading,
         addWeightLog,
+        deleteWeightLog,
         fetchWeightLogs
     };
 };

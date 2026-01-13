@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
 import { Card } from '../../components/ui/Card';
-import { supabase } from '../../lib/supabase';
+import { storage } from '../../lib/localDatabase';
 
 // Configure Spanish locale
 LocaleConfig.locales['es'] = {
@@ -28,7 +28,8 @@ interface WorkoutSession {
     id: string;
     session_date: string;
     duration_minutes: number;
-    routine?: { name: string } | null;
+    routine_id?: string | null;
+    routineName?: string | null;
 }
 
 interface WorkoutLog {
@@ -38,8 +39,9 @@ interface WorkoutLog {
     set_number: number;
     weight_kg: number;
     reps: number;
-    is_warmup: boolean;
-    exercise?: { name: string; muscle_group: string };
+    is_warmup: boolean | number;
+    exerciseName?: string;
+    muscleGroup?: string;
 }
 
 interface DayWorkout {
@@ -62,21 +64,31 @@ export default function CalendarScreen() {
         try {
             setLoading(true);
 
-            const { data: sessionsData, error: sessionsError } = await supabase
-                .from('workout_sessions')
-                .select('id, session_date, duration_minutes, routine:routines(name)')
-                .order('session_date', { ascending: false });
+            // Fetch from AsyncStorage
+            const sessionsData = await storage.workoutSessions.getAll() as any[];
+            const logsData = await storage.workoutLogs.getAll() as any[];
+            const routinesData = await storage.routines.getAll() as any[];
+            const exercisesData = await storage.exercises.getAll() as any[];
 
-            if (sessionsError) throw sessionsError;
+            // Add routine names to sessions
+            const sessionsWithRoutines = sessionsData.map(s => {
+                const routine = routinesData.find(r => r.id === s.routine_id);
+                return { ...s, routineName: routine?.name || null };
+            });
 
-            const { data: logsData, error: logsError } = await supabase
-                .from('workout_logs')
-                .select('id, session_id, exercise_id, set_number, weight_kg, reps, is_warmup, exercise:exercises(name, muscle_group)');
+            // Add exercise info to logs
+            const logsWithExercises = logsData.map(l => {
+                const exercise = exercisesData.find(e => e.id === l.exercise_id);
+                return {
+                    ...l,
+                    is_warmup: l.is_warmup === 1 || l.is_warmup === true,
+                    exerciseName: exercise?.name || 'Ejercicio',
+                    muscleGroup: exercise?.muscle_group || '',
+                };
+            });
 
-            if (logsError) throw logsError;
-
-            setSessions(sessionsData || []);
-            setLogs(logsData as any || []);
+            setSessions(sessionsWithRoutines);
+            setLogs(logsWithExercises);
 
         } catch (error) {
             console.error('Error fetching calendar data:', error);
@@ -109,8 +121,8 @@ export default function CalendarScreen() {
             const exerciseMap = new Map<string, { name: string; muscle_group: string; sets: number; volume: number }>();
 
             sessionLogs.forEach(log => {
-                const exerciseName = log.exercise?.name || 'Ejercicio';
-                const muscleGroup = log.exercise?.muscle_group || '';
+                const exerciseName = log.exerciseName || 'Ejercicio';
+                const muscleGroup = log.muscleGroup || '';
                 const volume = Number(log.weight_kg) * log.reps;
 
                 if (exerciseMap.has(log.exercise_id)) {
@@ -132,7 +144,7 @@ export default function CalendarScreen() {
             const totalSets = exercises.reduce((sum, e) => sum + e.sets, 0);
 
             setSelectedDayWorkout({
-                session,
+                session: { ...session, routineName: session.routineName },
                 exercises,
                 totalVolume,
                 totalSets,
@@ -268,11 +280,11 @@ export default function CalendarScreen() {
                                     </View>
                                 </View>
 
-                                {selectedDayWorkout.session.routine && (
+                                {selectedDayWorkout.session.routineName && (
                                     <View style={styles.routineBadge}>
                                         <Ionicons name="clipboard" size={14} color={COLORS.primary} />
                                         <Text style={styles.routineName}>
-                                            {selectedDayWorkout.session.routine.name}
+                                            {selectedDayWorkout.session.routineName}
                                         </Text>
                                     </View>
                                 )}

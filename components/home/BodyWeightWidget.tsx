@@ -75,13 +75,13 @@ export const BodyWeightWidget = () => {
                                     data={chartData}
                                     height={60}
                                     width={140}
-                                    hideRules
+                                    hideRules={true}
                                     hideDataPoints={false}
-                                    hideAxesAndRules
+                                    hideAxesAndRules={true}
                                     color={COLORS.primary}
                                     thickness={3}
-                                    curved
-                                    isAnimated
+                                    curved={true}
+                                    isAnimated={true}
                                     initialSpacing={0}
                                 />
                             ) : (

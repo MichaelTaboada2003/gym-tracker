@@ -235,9 +235,10 @@ export default function WorkoutScreen() {
         </Modal>
     );
 
-    if (!isActive) {
-        return (
-            <View style={styles.container}>
+    // Render content based on active state
+    const renderContent = () => {
+        if (!isActive) {
+            return (
                 <View style={styles.startWorkoutContainer}>
                     <View style={styles.startIconCircle}>
                         <Ionicons name="barbell" size={60} color={COLORS.primary} />
@@ -263,82 +264,90 @@ export default function WorkoutScreen() {
                         icon={<Ionicons name="add" size={20} color={COLORS.textPrimary} />}
                     />
                 </View>
-                <RoutinePickerModal />
-            </View>
+            );
+        }
+
+        return (
+            <>
+                {/* Active Workout Header */}
+                <View style={styles.workoutHeader}>
+                    <View style={styles.headerTop}>
+                        <Text style={styles.workoutTitle}>
+                            {routineName || 'Entrenamiento Libre'}
+                        </Text>
+                        <View style={styles.liveIndicator}>
+                            <View style={styles.liveDot} />
+                            <Text style={styles.liveText}>{formatDuration(duration)}</Text>
+                        </View>
+                    </View>
+
+                    <View style={styles.headerStats}>
+                        <View style={styles.headerStat}>
+                            <Text style={styles.headerStatLabel}>SETS</Text>
+                            <Text style={styles.headerStatValue}>{getCompletedSets()}</Text>
+                        </View>
+                        <View style={styles.headerDivider} />
+                        <View style={styles.headerStat}>
+                            <Text style={styles.headerStatLabel}>VOLUMEN</Text>
+                            <Text style={styles.headerStatValue}>{getTotalVolume().toFixed(0)} <Text style={{ fontSize: 12 }}>kg</Text></Text>
+                        </View>
+                    </View>
+                </View>
+
+                <ScrollView style={styles.exercisesList} contentContainerStyle={styles.exercisesContent}>
+                    {exercises.length === 0 ? (
+                        <View style={styles.emptyExercises}>
+                            <Ionicons name="add-circle-outline" size={48} color={COLORS.textMuted} />
+                            <Text style={styles.emptyText}>Añade tu primer ejercicio</Text>
+                        </View>
+                    ) : (
+                        exercises.map((ex, index) => (
+                            <ExerciseCard
+                                key={ex.exercise.id + index}
+                                exercise={ex.exercise}
+                                sets={ex.sets}
+                                previousBest={ex.previousBest}
+                                restSeconds={ex.restSeconds}
+                                onUpdateSet={(setIndex, data) => updateSet(index, setIndex, data)}
+                                onCompleteSet={(setIndex) => completeSet(index, setIndex)}
+                                onAddSet={() => addSet(index)}
+                                onRemoveSet={(setIndex) => removeSet(index, setIndex)}
+                                onRemoveExercise={() => removeExercise(index)}
+                            />
+                        ))
+                    )}
+
+                    <Button
+                        title="Añadir Ejercicio"
+                        variant="secondary"
+                        onPress={() => setShowExercisePicker(true)}
+                        style={styles.addExerciseButton}
+                        icon={<Ionicons name="add" size={18} color={COLORS.textPrimary} />}
+                    />
+                </ScrollView>
+
+                <View style={styles.bottomActions}>
+                    <Button
+                        title="Finalizar Entrenamiento"
+                        onPress={handleFinishWorkout}
+                        size="lg"
+                        variant="gradient"
+                        fullWidth
+                        icon={<Ionicons name="checkmark-circle" size={20} color="#FFF" />}
+                    />
+                </View>
+
+                <ExercisePickerModal />
+            </>
         );
-    }
+    };
 
     return (
         <View style={styles.container}>
-            {/* Active Workout Header */}
-            <View style={styles.workoutHeader}>
-                <View style={styles.headerTop}>
-                    <Text style={styles.workoutTitle}>
-                        {routineName || 'Entrenamiento Libre'}
-                    </Text>
-                    <View style={styles.liveIndicator}>
-                        <View style={styles.liveDot} />
-                        <Text style={styles.liveText}>{formatDuration(duration)}</Text>
-                    </View>
-                </View>
+            {renderContent()}
 
-                <View style={styles.headerStats}>
-                    <View style={styles.headerStat}>
-                        <Text style={styles.headerStatLabel}>SETS</Text>
-                        <Text style={styles.headerStatValue}>{getCompletedSets()}</Text>
-                    </View>
-                    <View style={styles.headerDivider} />
-                    <View style={styles.headerStat}>
-                        <Text style={styles.headerStatLabel}>VOLUMEN</Text>
-                        <Text style={styles.headerStatValue}>{getTotalVolume().toFixed(0)} <Text style={{ fontSize: 12 }}>kg</Text></Text>
-                    </View>
-                </View>
-            </View>
-
-            <ScrollView style={styles.exercisesList} contentContainerStyle={styles.exercisesContent}>
-                {exercises.length === 0 ? (
-                    <View style={styles.emptyExercises}>
-                        <Ionicons name="add-circle-outline" size={48} color={COLORS.textMuted} />
-                        <Text style={styles.emptyText}>Añade tu primer ejercicio</Text>
-                    </View>
-                ) : (
-                    exercises.map((ex, index) => (
-                        <ExerciseCard
-                            key={ex.exercise.id + index}
-                            exercise={ex.exercise}
-                            sets={ex.sets}
-                            previousBest={ex.previousBest}
-                            restSeconds={ex.restSeconds}
-                            onUpdateSet={(setIndex, data) => updateSet(index, setIndex, data)}
-                            onCompleteSet={(setIndex) => completeSet(index, setIndex)}
-                            onAddSet={() => addSet(index)}
-                            onRemoveSet={(setIndex) => removeSet(index, setIndex)}
-                            onRemoveExercise={() => removeExercise(index)}
-                        />
-                    ))
-                )}
-
-                <Button
-                    title="Añadir Ejercicio"
-                    variant="secondary"
-                    onPress={() => setShowExercisePicker(true)}
-                    style={styles.addExerciseButton}
-                    icon={<Ionicons name="add" size={18} color={COLORS.textPrimary} />}
-                />
-            </ScrollView>
-
-            <View style={styles.bottomActions}>
-                <Button
-                    title="Finalizar Entrenamiento"
-                    onPress={handleFinishWorkout}
-                    size="lg"
-                    variant="gradient"
-                    fullWidth
-                    icon={<Ionicons name="checkmark-circle" size={20} color="#FFF" />}
-                />
-            </View>
-
-            <ExercisePickerModal />
+            {/* Modals that can be shown in any state (especially summary after finish) */}
+            <RoutinePickerModal />
             <WorkoutSummaryModal
                 visible={showSummary}
                 data={summaryData}

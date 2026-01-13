@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
 import { Card } from '../../components/ui/Card';
-import { supabase } from '../../lib/supabase';
+import { storage } from '../../lib/localDatabase';
 import { useAdvancedStats } from '../../hooks/useAdvancedStats';
 
 const { width } = Dimensions.get('window');
@@ -67,22 +67,14 @@ export default function StatsScreen() {
         try {
             setLoading(true);
 
-            const { data: sessions, error: sessionsError } = await supabase
-                .from('workout_sessions')
-                .select('id, duration_minutes, session_date');
+            // Fetch from AsyncStorage
+            const sessions = await storage.workoutSessions.getAll() as any[];
+            const logs = await storage.workoutLogs.getAll() as any[];
 
-            if (sessionsError) throw sessionsError;
+            const totalWorkouts = sessions.length;
+            const totalMinutes = sessions.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
 
-            const { data: logs, error: logsError } = await supabase
-                .from('workout_logs')
-                .select('weight_kg, reps, is_warmup, session_id');
-
-            if (logsError) throw logsError;
-
-            const totalWorkouts = sessions?.length || 0;
-            const totalMinutes = sessions?.reduce((sum, s) => sum + (s.duration_minutes || 0), 0) || 0;
-
-            const workLogs = logs?.filter(l => !l.is_warmup) || [];
+            const workLogs = logs.filter(l => l.is_warmup !== 1 && l.is_warmup !== true);
             const totalSets = workLogs.length;
             const totalVolume = workLogs.reduce((sum, l) => sum + (Number(l.weight_kg) * l.reps), 0);
 
@@ -104,10 +96,10 @@ export default function StatsScreen() {
             const volumeByDay: number[] = [0, 0, 0, 0, 0, 0, 0];
             const sessionsByDay: number[] = [0, 0, 0, 0, 0, 0, 0];
 
-            const weekSessions = sessions?.filter(s => {
+            const weekSessions = sessions.filter(s => {
                 const sessionDate = new Date(s.session_date);
                 return sessionDate >= startOfWeek;
-            }) || [];
+            });
 
             weekSessions.forEach(session => {
                 const sessionDate = new Date(session.session_date);
@@ -116,7 +108,7 @@ export default function StatsScreen() {
 
                 sessionsByDay[dayIndex] += 1;
 
-                const sessionLogs = logs?.filter(l => l.session_id === session.id && !l.is_warmup) || [];
+                const sessionLogs = logs.filter(l => l.session_id === session.id && l.is_warmup !== 1 && l.is_warmup !== true);
                 const sessionVolume = sessionLogs.reduce((sum, l) => sum + (Number(l.weight_kg) * l.reps), 0);
                 volumeByDay[dayIndex] += sessionVolume;
             });
@@ -226,8 +218,8 @@ export default function StatsScreen() {
                                 xAxisLabelTextStyle={{ color: COLORS.textSecondary, fontSize: 11, fontWeight: '600' }}
                                 noOfSections={4}
                                 maxValue={maxVolume}
-                                hideRules
-                                isAnimated
+                                hideRules={true}
+                                isAnimated={true}
                                 spacing={16}
                             />
                         ) : hasSessionsThisWeek ? (
@@ -244,8 +236,8 @@ export default function StatsScreen() {
                                 xAxisLabelTextStyle={{ color: COLORS.textSecondary, fontSize: 11, fontWeight: '600' }}
                                 noOfSections={4}
                                 maxValue={Math.max(...weeklySessions.map(v => v.value), 3)}
-                                hideRules
-                                isAnimated
+                                hideRules={true}
+                                isAnimated={true}
                                 spacing={16}
                             />
                         ) : (
@@ -264,9 +256,9 @@ export default function StatsScreen() {
                             <View style={styles.pieContainer}>
                                 <PieChart
                                     data={pieChartData}
-                                    donut
-                                    showGradient
-                                    sectionAutoFocus
+                                    donut={true}
+                                    showGradient={true}
+                                    sectionAutoFocus={true}
                                     radius={110}
                                     innerRadius={75}
                                     innerCircleColor={COLORS.surface}
@@ -369,7 +361,7 @@ const styles = StyleSheet.create({
     content: {
         padding: SPACING.md,
         paddingBottom: SPACING.xxl,
-        gap: SPACING.lg, // Added gap between cards
+        gap: SPACING.lg,
     },
     header: {
         paddingHorizontal: SPACING.lg,
@@ -428,7 +420,6 @@ const styles = StyleSheet.create({
         fontSize: FONT_SIZES.sm,
         color: COLORS.textSecondary,
     },
-    // Pie Chart Styles
     pieContainer: {
         alignItems: 'center',
         marginVertical: SPACING.md,
@@ -488,7 +479,6 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: COLORS.textPrimary,
     },
-    // PR List Styles
     prList: {
         gap: SPACING.sm,
     },
@@ -537,7 +527,6 @@ const styles = StyleSheet.create({
         fontSize: FONT_SIZES.xs,
         color: COLORS.textSecondary,
     },
-    // General Stats
     emptyState: {
         alignItems: 'center',
         paddingVertical: SPACING.lg,
