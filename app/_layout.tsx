@@ -3,11 +3,16 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, StyleSheet } from 'react-native';
 import { COLORS } from '../constants/colors';
-import { initializeDatabase } from '../lib/localDatabase';
+import { initializeDatabase, migrateRestTimes, migrateTimePerRep } from '../lib/localDatabase';
 
 export default function RootLayout() {
     useEffect(() => {
-        initializeDatabase();
+        const init = async () => {
+            await initializeDatabase();
+            await migrateRestTimes();
+            await migrateTimePerRep(); // Update time per rep for exercises
+        };
+        init();
     }, []);
 
     return (

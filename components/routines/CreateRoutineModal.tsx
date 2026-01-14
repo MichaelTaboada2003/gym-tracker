@@ -17,12 +17,14 @@ import { RoutineWithExercises } from '../../hooks/useRoutines';
 import { useExercises } from '../../hooks/useExercises';
 import { Exercise } from '../../lib/database.types';
 
-const REST_TIME_OPTIONS = [30, 60, 90, 120, 180]; // seconds
+const REST_TIME_OPTIONS = [30, 45, 60, 75, 90, 105, 120, 150, 180]; // seconds (30s to 3min)
+const TIME_PER_REP_OPTIONS = [2, 3, 4, 5]; // seconds per rep
 
 export interface SelectedExercise extends Exercise {
     sets: number;
-    reps: string | number;
+    reps: number;
     restTime: number; // in seconds
+    timePerRep: number; // seconds per repetition
 }
 
 interface CreateRoutineModalProps {
@@ -49,18 +51,30 @@ export function CreateRoutineModal({ visible, onClose, onCreate, onUpdate, initi
             setName(initialData.name);
             setDescription(initialData.description || '');
 
-            const exercises: SelectedExercise[] = initialData.routine_exercises.map(re => ({
-                id: re.exercise_id,
-                name: re.exercise.name,
-                muscle_group: re.exercise.muscle_group,
-                equipment: '', // Missing in routine_exercises, not critical
-                notes: null,
-                created_at: '',
+            const exercises: SelectedExercise[] = initialData.routine_exercises.map(re => {
+                // Parse reps - handle strings like "10", "8-10", etc.
+                let repsNum = 5;
+                if (re.target_reps) {
+                    const parsed = parseInt(re.target_reps.toString().split('-')[0], 10);
+                    if (!isNaN(parsed)) repsNum = parsed;
+                }
 
-                sets: re.target_sets,
-                reps: re.target_reps,
-                restTime: re.notes ? (JSON.parse(re.notes).restTime || 90) : 90
-            }));
+                return {
+                    id: re.exercise_id,
+                    name: re.exercise.name,
+                    muscle_group: re.exercise.muscle_group,
+                    equipment: re.exercise.equipment || '',
+                    notes: null,
+                    created_at: '',
+                    time_per_rep_seconds: re.exercise.time_per_rep_seconds || 3,
+                    default_rest_seconds: re.exercise.default_rest_seconds || 90,
+
+                    sets: re.target_sets,
+                    reps: repsNum,
+                    restTime: re.notes ? (JSON.parse(re.notes).restTime || 90) : 90,
+                    timePerRep: re.notes ? (JSON.parse(re.notes).timePerRep || re.exercise.time_per_rep_seconds || 3) : (re.exercise.time_per_rep_seconds || 3)
+                };
+            });
 
             setSelectedExercises(exercises);
         } else if (visible && !initialData) {
@@ -96,7 +110,13 @@ export function CreateRoutineModal({ visible, onClose, onCreate, onUpdate, initi
         } else {
             setSelectedExercises(prev => [
                 ...prev,
-                { ...exercise, sets: 3, reps: '10', restTime: 90 } // Defaults
+                {
+                    ...exercise,
+                    sets: 3,
+                    reps: 5,
+                    restTime: exercise.default_rest_seconds || 90,
+                    timePerRep: exercise.time_per_rep_seconds || 3
+                }
             ]);
         }
     };
@@ -291,15 +311,22 @@ export function CreateRoutineModal({ visible, onClose, onCreate, onUpdate, initi
                                         </View>
 
                                         <View style={styles.configField}>
-                                            <Text style={styles.configFieldLabel}>Reps (Ej: 10, 6-8, Fallo)</Text>
-                                            <TextInput
-                                                style={styles.repsInput}
-                                                value={exercise.reps.toString()} // Assuming exercise.reps is now string in state
-                                                onChangeText={(text) => updateExercise(exercise.id, { reps: text as any })}
-                                                placeholder="10"
-                                                placeholderTextColor={COLORS.textMuted}
-                                                keyboardType="default"
-                                            />
+                                            <Text style={styles.configFieldLabel}>Repeticiones</Text>
+                                            <View style={styles.stepper}>
+                                                <TouchableOpacity
+                                                    style={styles.stepperBtn}
+                                                    onPress={() => updateExercise(exercise.id, { reps: Math.max(1, Number(exercise.reps) - 1) })}
+                                                >
+                                                    <Ionicons name="remove" size={16} color={COLORS.textPrimary} />
+                                                </TouchableOpacity>
+                                                <Text style={styles.stepperValue}>{exercise.reps}</Text>
+                                                <TouchableOpacity
+                                                    style={styles.stepperBtn}
+                                                    onPress={() => updateExercise(exercise.id, { reps: Number(exercise.reps) + 1 })}
+                                                >
+                                                    <Ionicons name="add" size={16} color={COLORS.textPrimary} />
+                                                </TouchableOpacity>
+                                            </View>
                                         </View>
                                     </View>
 
@@ -327,6 +354,37 @@ export function CreateRoutineModal({ visible, onClose, onCreate, onUpdate, initi
                                                 </TouchableOpacity>
                                             ))}
                                         </View>
+                                    </View>
+
+                                    {/* Time Per Rep Chips */}
+                                    <View style={styles.restTimeContainer}>
+                                        <Text style={styles.configFieldLabel}>
+                                            <Ionicons name="speedometer-outline" size={14} color={COLORS.textSecondary} /> Tiempo/Rep
+                                        </Text>
+                                        <View style={styles.restTimeOptions}>
+                                            {TIME_PER_REP_OPTIONS.map(time => (
+                                                <TouchableOpacity
+                                                    key={time}
+                                                    style={[
+                                                        styles.restTimeChip,
+                                                        exercise.timePerRep === time && styles.timePerRepChipActive
+                                                    ]}
+                                                    onPress={() => updateExercise(exercise.id, { timePerRep: time })}
+                                                >
+                                                    <Text style={[
+                                                        styles.restTimeChipText,
+                                                        exercise.timePerRep === time && styles.timePerRepChipTextActive
+                                                    ]}>
+                                                        {time}s
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </View>
+                                        <Text style={styles.timePerRepHint}>
+                                            {exercise.timePerRep === 2 ? '⚡ Rápido' :
+                                                exercise.timePerRep === 3 ? '💪 Normal' :
+                                                    exercise.timePerRep === 4 ? '🎯 Controlado' : '🐢 Lento'}
+                                        </Text>
                                     </View>
                                 </View>
                             ))}
@@ -575,6 +633,19 @@ const styles = StyleSheet.create({
     restTimeChipTextActive: {
         color: '#FFF',
         fontWeight: '600',
+    },
+    timePerRepChipActive: {
+        backgroundColor: COLORS.secondary,
+    },
+    timePerRepChipTextActive: {
+        color: '#FFF',
+        fontWeight: '600',
+    },
+    timePerRepHint: {
+        fontSize: FONT_SIZES.xs,
+        color: COLORS.textMuted,
+        marginTop: SPACING.xs,
+        textAlign: 'center',
     },
     footer: {
         flexDirection: 'row',

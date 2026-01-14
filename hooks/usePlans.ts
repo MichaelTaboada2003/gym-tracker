@@ -113,6 +113,7 @@ export function usePlans() {
         id: string,
         name: string,
         description: string | null,
+        durationDays: number,
         routines: { day: number; routineId: string; notes?: string }[]
     ) => {
         try {
@@ -123,6 +124,7 @@ export function usePlans() {
             await storage.plans.update(id, {
                 name,
                 description,
+                duration_days: durationDays,
                 updated_at: now,
             });
 

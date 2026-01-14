@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Storage keys
-const STORAGE_KEYS = {
+export const STORAGE_KEYS = {
     EXERCISES: '@gym_tracker_exercises',
     ROUTINES: '@gym_tracker_routines',
     ROUTINE_EXERCISES: '@gym_tracker_routine_exercises',
@@ -9,6 +9,7 @@ const STORAGE_KEYS = {
     PLAN_ROUTINES: '@gym_tracker_plan_routines',
     WORKOUT_SESSIONS: '@gym_tracker_workout_sessions',
     WORKOUT_LOGS: '@gym_tracker_workout_logs',
+    BODY_WEIGHT: '@gym_tracker_body_weight',
 };
 
 // Clear all data (useful for debugging/reset)
@@ -19,6 +20,205 @@ export const clearAllData = async (): Promise<void> => {
         console.log('✅ All data cleared');
     } catch (error) {
         console.error('Error clearing data:', error);
+    }
+};
+
+// Rest time mapping based on exercise patterns
+const REST_TIME_MAP: Record<string, number> = {
+    // Compound heavy exercises - 2.5 min (150s)
+    'Press Banca Plano': 150,
+    'Dominadas': 150,
+    'Sentadilla Libre': 150,
+
+    // Compound secondary - 2 min (120s)
+    'Remo con Barra': 120,
+    'Peso Muerto Rumano': 120,
+    'Press Inclinado (Barra': 120,
+    'Hack Squat': 120,
+
+    // Accessories - 90s-2min (105s)
+    'Press Inclinado con Mancuernas': 105,
+    'Press Militar': 105,
+    'Prensa de Piernas': 105,
+    'Jalón al Pecho': 105,
+    'Zancadas': 105,
+
+    // Isolation medium - 90s
+    'Fondos': 90,
+    'Curl con Barra': 90,
+    'Remo en Polea': 90,
+    'Remo en Máquina': 90,
+    'Press Francés': 90,
+    'Curl Predicador': 90,
+    'Extensión de Cuádriceps': 90,
+
+    // Isolation light - 60-90s (75s)
+    'Elevaciones Laterales': 75,
+    'Curl Inclinado': 75,
+    'Curl Femoral': 75,
+    'Pullover': 75,
+    'Peck Deck': 75,
+    'Curl Martillo': 75,
+
+    // Finishers - 60s
+    'Extensión de Tríceps': 60,
+    'Face Pull': 60,
+    'Elevación de Talones': 60,
+    'Gemelos': 60,
+    'Pájaros': 60,
+    'Extensión Tríceps Unilateral': 60,
+};
+
+// Migrate rest times for existing routine exercises
+export const migrateRestTimes = async (): Promise<void> => {
+    try {
+        const routineExercises = await getAll<any>(STORAGE_KEYS.ROUTINE_EXERCISES);
+        const exercises = await getAll<any>(STORAGE_KEYS.EXERCISES);
+
+        let updated = 0;
+
+        const updatedRoutineExercises = routineExercises.map((re: any) => {
+            const exercise = exercises.find((e: any) => e.id === re.exercise_id);
+            if (!exercise) return re;
+
+            // Find matching rest time
+            let restTime = 90; // default
+            for (const [pattern, time] of Object.entries(REST_TIME_MAP)) {
+                if (exercise.name.includes(pattern)) {
+                    restTime = time;
+                    break;
+                }
+            }
+
+            // Update notes with rest time
+            let notes: any = {};
+            if (re.notes) {
+                try {
+                    notes = JSON.parse(re.notes);
+                } catch {
+                    notes = { originalNotes: re.notes };
+                }
+            }
+
+            if (notes.restTime !== restTime) {
+                notes.restTime = restTime;
+                updated++;
+            }
+
+            return {
+                ...re,
+                notes: JSON.stringify(notes),
+            };
+        });
+
+        if (updated > 0) {
+            await saveAll(STORAGE_KEYS.ROUTINE_EXERCISES, updatedRoutineExercises);
+            console.log(`✅ Migrated rest times for ${updated} exercises`);
+        } else {
+            console.log('✅ Rest times already up to date');
+        }
+    } catch (error) {
+        console.error('Error migrating rest times:', error);
+    }
+};
+
+// Time per rep mapping based on exercise patterns
+const TIME_PER_REP_MAP: Record<string, number> = {
+    // Heavy/Slow (4-5s per rep)
+    'Sentadilla': 4,
+    'Peso Muerto': 5,
+    'Dominadas': 4,
+    'Fondos': 4,
+    'Hack Squat': 4,
+    'Zancadas': 4,
+    'Curl Inclinado': 4,
+
+    // Standard (3s per rep)
+    'Press Banca': 3,
+    'Press Inclinado': 3,
+    'Press Militar': 3,
+    'Remo': 3,
+    'Curl con Barra': 3,
+    'Curl Predicador': 3,
+    'Curl Martillo': 3,
+    'Prensa': 3,
+    'Extensión de Cuádriceps': 3,
+    'Curl Femoral': 3,
+    'Jalón': 3,
+    'Pullover': 3,
+    'Peck Deck': 3,
+    'Press Francés': 3,
+
+    // Fast (2s per rep)
+    'Elevaciones Laterales': 2,
+    'Face Pull': 2,
+    'Extensión de Tríceps': 2,
+    'Extensión Tríceps': 2,
+    'Elevación de Talones': 2,
+    'Gemelos': 2,
+    'Pájaros': 2,
+};
+
+// Migrate time per rep for existing exercises
+export const migrateTimePerRep = async (): Promise<void> => {
+    try {
+        // Update base exercises
+        const exercises = await getAll<any>(STORAGE_KEYS.EXERCISES);
+        let updatedExercises = 0;
+
+        const newExercises = exercises.map((ex: any) => {
+            let timePerRep = 3; // default
+            for (const [pattern, time] of Object.entries(TIME_PER_REP_MAP)) {
+                if (ex.name.includes(pattern)) {
+                    timePerRep = time;
+                    break;
+                }
+            }
+
+            if (ex.time_per_rep_seconds !== timePerRep) {
+                updatedExercises++;
+                return { ...ex, time_per_rep_seconds: timePerRep };
+            }
+            return ex;
+        });
+
+        if (updatedExercises > 0) {
+            await saveAll(STORAGE_KEYS.EXERCISES, newExercises);
+            console.log(`✅ Updated time_per_rep for ${updatedExercises} exercises`);
+        }
+
+        // Update routine_exercises notes with timePerRep
+        const routineExercises = await getAll<any>(STORAGE_KEYS.ROUTINE_EXERCISES);
+        let updatedRoutineEx = 0;
+
+        const newRoutineExercises = routineExercises.map((re: any) => {
+            const exercise = newExercises.find((e: any) => e.id === re.exercise_id);
+            if (!exercise) return re;
+
+            let notes: any = {};
+            if (re.notes) {
+                try {
+                    notes = JSON.parse(re.notes);
+                } catch {
+                    notes = {};
+                }
+            }
+
+            const expectedTimePerRep = exercise.time_per_rep_seconds || 3;
+            if (notes.timePerRep !== expectedTimePerRep) {
+                notes.timePerRep = expectedTimePerRep;
+                updatedRoutineEx++;
+                return { ...re, notes: JSON.stringify(notes) };
+            }
+            return re;
+        });
+
+        if (updatedRoutineEx > 0) {
+            await saveAll(STORAGE_KEYS.ROUTINE_EXERCISES, newRoutineExercises);
+            console.log(`✅ Migrated timePerRep for ${updatedRoutineEx} routine exercises`);
+        }
+    } catch (error) {
+        console.error('Error migrating time per rep:', error);
     }
 };
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, Alert, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { Button } from '../../components/ui/Button';
 import { BodyWeightWidget } from '../../components/home/BodyWeightWidget';
 import { GradientText } from '../../components/ui/GradientText';
 import { storage } from '../../lib/localDatabase';
+import { generateDemoData, clearWorkoutData } from '../../lib/generateDemoData';
 
 interface HomeStats {
     totalWorkouts: number;
@@ -142,6 +143,34 @@ export default function HomeScreen() {
         return date.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
     };
 
+    const handleGenerateDemoData = async () => {
+        Alert.alert(
+            'Generar Datos Demo',
+            '¿Crear 6 semanas de entrenamientos de ejemplo para capturas?',
+            [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                    text: 'Limpiar primero',
+                    style: 'destructive',
+                    onPress: async () => {
+                        await clearWorkoutData();
+                        await generateDemoData();
+                        fetchHomeData();
+                        Alert.alert('✅ Listo', 'Datos demo generados');
+                    }
+                },
+                {
+                    text: 'Agregar',
+                    onPress: async () => {
+                        await generateDemoData();
+                        fetchHomeData();
+                        Alert.alert('✅ Listo', 'Datos demo agregados');
+                    }
+                },
+            ]
+        );
+    };
+
     return (
         <View style={styles.container}>
             {/* Header with Gradient */}
@@ -157,6 +186,13 @@ export default function HomeScreen() {
                         <Text style={styles.headerTitle}>Resumen</Text>
                     </View>
                     <View style={styles.headerButtons}>
+                        {/* Temporary Demo Button - Remove after screenshots */}
+                        <TouchableOpacity
+                            style={styles.demoButton}
+                            onPress={handleGenerateDemoData}
+                        >
+                            <Ionicons name="flask" size={18} color={COLORS.secondary} />
+                        </TouchableOpacity>
                         <View style={styles.streakBadgeContainer}>
                             <LinearGradient
                                 colors={['#F59E0B20', '#F59E0B10']}
@@ -181,91 +217,100 @@ export default function HomeScreen() {
 
 
                 {/* Stats Overview */}
-                <Text style={styles.sectionTitle}>Tu Progreso Semanal</Text>
-                <View style={styles.statsGrid}>
-                    <View style={styles.statItem}>
-                        <LinearGradient
-                            colors={COLORS.gradients.glass}
-                            style={styles.statGradient}
-                        >
-                            <Ionicons name="barbell-outline" size={24} color={COLORS.primaryLight} />
-                            <Text style={styles.statValue}>{stats.thisWeek}</Text>
-                            <Text style={styles.statLabel}>Sessions</Text>
-                        </LinearGradient>
-                    </View>
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Tu Progreso Semanal</Text>
+                    <View style={styles.statsGrid}>
+                        <View style={styles.statItem}>
+                            <LinearGradient
+                                colors={COLORS.gradients.glass}
+                                style={styles.statGradient}
+                            >
+                                <Ionicons name="barbell-outline" size={24} color={COLORS.primaryLight} />
+                                <Text style={styles.statValue}>{stats.thisWeek}</Text>
+                                <Text style={styles.statLabel}>Sesiones</Text>
+                            </LinearGradient>
+                        </View>
 
-                    <View style={styles.statItem}>
-                        <LinearGradient
-                            colors={COLORS.gradients.glass}
-                            style={styles.statGradient}
-                        >
-                            <Ionicons name="layers-outline" size={24} color={COLORS.secondaryLight} />
-                            <Text style={styles.statValue}>{stats.totalWorkouts}</Text>
-                            <Text style={styles.statLabel}>Total</Text>
-                        </LinearGradient>
-                    </View>
+                        <View style={styles.statItem}>
+                            <LinearGradient
+                                colors={COLORS.gradients.glass}
+                                style={styles.statGradient}
+                            >
+                                <Ionicons name="layers-outline" size={24} color={COLORS.secondaryLight} />
+                                <Text style={styles.statValue}>{stats.totalWorkouts}</Text>
+                                <Text style={styles.statLabel}>Total</Text>
+                            </LinearGradient>
+                        </View>
 
-                    <View style={styles.statItem}>
-                        <LinearGradient
-                            colors={COLORS.gradients.glass}
-                            style={styles.statGradient}
-                        >
-                            <Ionicons name="trending-up-outline" size={24} color={COLORS.success} />
-                            <Text style={styles.statValue}>{formatVolume(stats.totalVolume)}</Text>
-                            <Text style={styles.statLabel}>Volumen</Text>
-                        </LinearGradient>
+                        <View style={styles.statItem}>
+                            <LinearGradient
+                                colors={COLORS.gradients.glass}
+                                style={styles.statGradient}
+                            >
+                                <Ionicons name="trending-up-outline" size={24} color={COLORS.success} />
+                                <Text style={styles.statValue}>{formatVolume(stats.totalVolume)}</Text>
+                                <Text style={styles.statLabel}>Volumen</Text>
+                            </LinearGradient>
+                        </View>
                     </View>
                 </View>
 
                 {/* Body Weight Widget */}
-                <View style={{ marginTop: SPACING.xl }}>
+                <View style={styles.section}>
                     <BodyWeightWidget />
                 </View>
 
                 {/* Recent Activity */}
-                <Text style={styles.sectionTitle}>Actividad Reciente</Text>
-                <Card variant="glass" style={styles.recentCard}>
-                    {recentWorkouts.length === 0 ? (
-                        <View style={styles.emptyState}>
-                            <View style={styles.iconCircle}>
-                                <Ionicons name="analytics-outline" size={32} color={COLORS.textMuted} />
-                            </View>
-                            <Text style={styles.emptyText}>
-                                Aún no hay registros recientes.
-                            </Text>
-                            <Button
-                                title="Ver Historial"
-                                variant="ghost"
-                                size="sm"
-                                onPress={() => router.push('/stats')}
-                            />
-                        </View>
-                    ) : (
-                        <View style={styles.recentList}>
-                            {recentWorkouts.map((workout) => (
-                                <View key={workout.id} style={styles.recentItem}>
-                                    <View style={styles.recentIcon}>
-                                        <Ionicons name="fitness" size={20} color={COLORS.primary} />
-                                    </View>
-                                    <View style={styles.recentInfo}>
-                                        <Text style={styles.recentName}>
-                                            {workout.routineName || 'Entrenamiento Libre'}
-                                        </Text>
-                                        <Text style={styles.recentMeta}>
-                                            {formatDate(workout.date)} • {workout.sets} series • {workout.duration} min
-                                        </Text>
-                                    </View>
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Actividad Reciente</Text>
+                    <Card variant="glass" style={styles.recentCard}>
+                        {recentWorkouts.length === 0 ? (
+                            <View style={styles.emptyState}>
+                                <View style={styles.iconCircle}>
+                                    <Ionicons name="analytics-outline" size={32} color={COLORS.textMuted} />
                                 </View>
-                            ))}
-                            <Button
-                                title="Ver Historial"
-                                variant="ghost"
-                                size="sm"
-                                onPress={() => router.push('/stats')}
-                            />
-                        </View>
-                    )}
-                </Card>
+                                <Text style={styles.emptyText}>
+                                    Aún no hay registros recientes.
+                                </Text>
+                                <Button
+                                    title="Ver Historial"
+                                    variant="ghost"
+                                    size="sm"
+                                    onPress={() => router.push('/stats')}
+                                />
+                            </View>
+                        ) : (
+                            <View style={styles.recentList}>
+                                {recentWorkouts.map((workout, index) => (
+                                    <View key={workout.id} style={[
+                                        styles.recentItem,
+                                        index === recentWorkouts.length - 1 && styles.recentItemLast
+                                    ]}>
+                                        <View style={styles.recentIcon}>
+                                            <Ionicons name="fitness" size={20} color={COLORS.primary} />
+                                        </View>
+                                        <View style={styles.recentInfo}>
+                                            <Text style={styles.recentName} numberOfLines={1}>
+                                                {workout.routineName || 'Entrenamiento Libre'}
+                                            </Text>
+                                            <Text style={styles.recentMeta}>
+                                                {formatDate(workout.date)} • {workout.sets} series • {workout.duration} min
+                                            </Text>
+                                        </View>
+                                    </View>
+                                ))}
+                                <View style={styles.viewHistoryBtn}>
+                                    <Button
+                                        title="Ver Todo el Historial"
+                                        variant="ghost"
+                                        size="sm"
+                                        onPress={() => router.push('/stats')}
+                                    />
+                                </View>
+                            </View>
+                        )}
+                    </Card>
+                </View>
             </ScrollView>
         </View>
     );
@@ -358,35 +403,37 @@ const styles = StyleSheet.create({
         fontSize: FONT_SIZES.lg,
         fontWeight: '700',
         color: COLORS.textPrimary,
-        marginBottom: SPACING.md,
+        marginBottom: SPACING.lg,
     },
     statsGrid: {
         flexDirection: 'row',
-        gap: SPACING.md,
-        marginBottom: SPACING.xl,
+        gap: SPACING.sm,
     },
     statItem: {
         flex: 1,
     },
     statGradient: {
-        padding: SPACING.md,
+        paddingVertical: SPACING.lg,
+        paddingHorizontal: SPACING.sm,
         borderRadius: BORDER_RADIUS.lg,
         alignItems: 'center',
         borderWidth: 1,
         borderColor: COLORS.overlay.light,
+        minHeight: 100,
     },
     statValue: {
-        fontSize: FONT_SIZES.xl,
-        fontWeight: '700',
+        fontSize: 28,
+        fontWeight: '800',
         color: COLORS.textPrimary,
         marginTop: SPACING.sm,
     },
     statLabel: {
         fontSize: 10,
         color: COLORS.textSecondary,
-        marginTop: 2,
+        marginTop: 4,
         textTransform: 'uppercase',
-        letterSpacing: 0.5,
+        letterSpacing: 1,
+        fontWeight: '600',
     },
     recentCard: {
         minHeight: 120,
@@ -439,6 +486,25 @@ const styles = StyleSheet.create({
     recentMeta: {
         fontSize: FONT_SIZES.xs,
         color: COLORS.textSecondary,
-        marginTop: 2,
+        marginTop: 4,
+    },
+    section: {
+        marginBottom: SPACING.xl,
+    },
+    recentItemLast: {
+        borderBottomWidth: 0,
+    },
+    viewHistoryBtn: {
+        marginTop: SPACING.md,
+        alignItems: 'center',
+    },
+    demoButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        backgroundColor: COLORS.secondary + '20',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: SPACING.sm,
     },
 });

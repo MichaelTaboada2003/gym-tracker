@@ -7,6 +7,9 @@ export type RoutineWithExercises = Routine & {
         exercise: {
             name: string;
             muscle_group: string;
+            equipment?: string;
+            time_per_rep_seconds?: number;
+            default_rest_seconds?: number;
         };
     })[];
 };
@@ -42,6 +45,9 @@ export function useRoutines() {
                             exercise: exercise ? {
                                 name: exercise.name,
                                 muscle_group: exercise.muscle_group,
+                                equipment: exercise.equipment,
+                                time_per_rep_seconds: exercise.time_per_rep_seconds,
+                                default_rest_seconds: exercise.default_rest_seconds,
                             } : { name: 'Desconocido', muscle_group: '' },
                         };
                     });
@@ -64,7 +70,7 @@ export function useRoutines() {
     const createRoutine = async (
         name: string,
         description: string | null,
-        exercises: { id: string; sets: number; reps: string | number; restTime?: number }[]
+        exercises: { id: string; sets: number; reps: string | number; restTime?: number; timePerRep?: number }[]
     ) => {
         try {
             setLoading(true);
@@ -99,7 +105,10 @@ export function useRoutines() {
                     order_index: i,
                     target_sets: ex.sets,
                     target_reps: ex.reps.toString(),
-                    notes: ex.restTime ? JSON.stringify({ restTime: ex.restTime }) : null,
+                    notes: JSON.stringify({
+                        restTime: ex.restTime || 90,
+                        timePerRep: ex.timePerRep || 3
+                    }),
                 };
                 await storage.routineExercises.add(routineExercise);
             }
@@ -118,7 +127,7 @@ export function useRoutines() {
         id: string,
         name: string,
         description: string | null,
-        exercises: { id: string; sets: number; reps: string | number; restTime?: number }[]
+        exercises: { id: string; sets: number; reps: string | number; restTime?: number; timePerRep?: number }[]
     ) => {
         try {
             setLoading(true);
@@ -152,7 +161,10 @@ export function useRoutines() {
                     order_index: i,
                     target_sets: ex.sets,
                     target_reps: ex.reps.toString(),
-                    notes: ex.restTime ? JSON.stringify({ restTime: ex.restTime }) : null,
+                    notes: JSON.stringify({
+                        restTime: ex.restTime || 90,
+                        timePerRep: ex.timePerRep || 3
+                    }),
                 };
                 await storage.routineExercises.add(routineExercise);
             }
@@ -196,6 +208,9 @@ export function useRoutines() {
                     exercise: exercise ? {
                         name: exercise.name,
                         muscle_group: exercise.muscle_group,
+                        equipment: exercise.equipment,
+                        time_per_rep_seconds: exercise.time_per_rep_seconds,
+                        default_rest_seconds: exercise.default_rest_seconds,
                     } : { name: 'Desconocido', muscle_group: '' },
                 };
             });

@@ -8,6 +8,7 @@ import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colo
 import { Card } from '../../components/ui/Card';
 import { storage } from '../../lib/localDatabase';
 import { useAdvancedStats } from '../../hooks/useAdvancedStats';
+import { ExerciseProgressWidget } from '../../components/stats/ExerciseHistoryWidget';
 
 const { width } = Dimensions.get('window');
 
@@ -347,6 +348,11 @@ export default function StatsScreen() {
                             <Text style={styles.statLabel}>Tiempo</Text>
                         </View>
                     </View>
+                </Card>
+
+                {/* Exercise History Widget */}
+                <Card>
+                    <ExerciseProgressWidget />
                 </Card>
             </ScrollView>
         </View >
