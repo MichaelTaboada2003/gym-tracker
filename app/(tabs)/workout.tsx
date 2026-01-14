@@ -38,6 +38,9 @@ export default function WorkoutScreen() {
         startWorkout,
         endWorkout,
         addExercise,
+        addExerciseWithHistory,
+        getPreviousBest,
+        getPreviousSets,
         addSet,
         updateSet,
         removeSet,
@@ -113,37 +116,65 @@ export default function WorkoutScreen() {
         setSummaryData(null);
     };
 
-    const handleStartFromRoutine = (routine: RoutineWithExercises) => {
-        // Start workout with routine info
-        startWorkout(routine.id, routine.name);
+    const handleStartFromRoutine = async (routine: RoutineWithExercises) => {
+        try {
+            // Start workout with routine info
+            startWorkout(routine.id, routine.name);
+            setShowRoutinePicker(false);
 
-        // Add all exercises from the routine
-        routine.routine_exercises.forEach((re) => {
-            // Parse rest time from notes JSON if present
-            let restSeconds = re.exercise.default_rest_seconds || 90;
-            if (re.notes) {
-                try {
-                    const parsed = JSON.parse(re.notes);
-                    if (parsed.restTime) {
-                        restSeconds = parsed.restTime;
+            // Fetch all previous sets (per-set data) in parallel
+            const previousSetsData = await Promise.all(
+                routine.routine_exercises.map(async (re) => {
+                    const prevSets = await getPreviousSets(re.exercise_id);
+                    // Calculate best from previous sets
+                    const prevBest = prevSets.length > 0
+                        ? prevSets.reduce((best, set) =>
+                            set.weight > best.weight ? set : best, prevSets[0])
+                        : null;
+                    return { exerciseId: re.exercise_id, prevSets, prevBest };
+                })
+            );
+
+            // Create maps for quick lookup
+            const prevSetsMap = new Map(
+                previousSetsData.map(pd => [pd.exerciseId, pd.prevSets])
+            );
+            const prevBestMap = new Map(
+                previousSetsData.map(pd => [pd.exerciseId, pd.prevBest])
+            );
+
+            // Add all exercises from the routine
+            routine.routine_exercises.forEach((re) => {
+                // Parse rest time from notes JSON if present
+                let restSeconds = re.exercise.default_rest_seconds || 90;
+                if (re.notes) {
+                    try {
+                        const parsed = JSON.parse(re.notes);
+                        if (parsed.restTime) {
+                            restSeconds = parsed.restTime;
+                        }
+                    } catch {
+                        // Notes is just a regular string
                     }
-                } catch {
-                    // Notes is just a regular string
                 }
-            }
 
-            addExercise({
-                ...re.exercise,
-                id: re.exercise_id,
-            } as any, null, {
-                targetSets: re.target_sets,
-                targetReps: re.target_reps,
-                restSeconds,
-                notes: re.notes
+                const previousBest = prevBestMap.get(re.exercise_id) || null;
+                const previousSets = prevSetsMap.get(re.exercise_id) || [];
+
+                addExercise({
+                    ...re.exercise,
+                    id: re.exercise_id,
+                } as any, previousBest, {
+                    targetSets: re.target_sets,
+                    targetReps: re.target_reps,
+                    restSeconds,
+                    notes: re.notes
+                }, previousSets);
             });
-        });
-
-        setShowRoutinePicker(false);
+        } catch (error) {
+            console.error('Error starting routine:', error);
+            Alert.alert('Error', 'No se pudo iniciar la rutina');
+        }
     };
 
     // Exercise picker modal
@@ -170,8 +201,8 @@ export default function WorkoutScreen() {
                     renderItem={({ item }) => (
                         <TouchableOpacity
                             style={styles.exerciseItem}
-                            onPress={() => {
-                                addExercise(item, null);
+                            onPress={async () => {
+                                await addExerciseWithHistory(item);
                                 setShowExercisePicker(false);
                             }}
                         >

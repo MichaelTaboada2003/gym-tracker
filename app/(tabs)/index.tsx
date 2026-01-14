@@ -9,7 +9,6 @@ import { Button } from '../../components/ui/Button';
 import { BodyWeightWidget } from '../../components/home/BodyWeightWidget';
 import { GradientText } from '../../components/ui/GradientText';
 import { storage } from '../../lib/localDatabase';
-import { generateDemoData, clearWorkoutData } from '../../lib/generateDemoData';
 
 interface HomeStats {
     totalWorkouts: number;
@@ -70,26 +69,37 @@ export default function HomeScreen() {
             const workLogs = logs.filter(l => l.is_warmup !== 1 && l.is_warmup !== true);
             const totalVolume = workLogs.reduce((sum, l) => sum + (Number(l.weight_kg) * l.reps), 0);
 
-            // Calculate streak (simplified - consecutive days with workouts)
+            // Calculate streak (consecutive workout periods - allows up to 2 rest days between sessions)
             let streak = 0;
             if (sortedSessions.length > 0) {
                 const todayStr = today.toISOString().split('T')[0];
-                const yesterdayStr = new Date(today.getTime() - 86400000).toISOString().split('T')[0];
+                const todayTime = today.getTime();
 
-                // Check if today or yesterday had a workout
+                // Check if the most recent workout was within the last 3 days
                 const recentDate = sortedSessions[0]?.session_date;
-                if (recentDate === todayStr || recentDate === yesterdayStr) {
-                    streak = 1;
-                    let checkDate = new Date(recentDate);
+                const recentTime = new Date(recentDate).getTime();
+                const daysSinceLastWorkout = Math.floor((todayTime - recentTime) / 86400000);
 
+                // Streak is active if last workout was within 3 days (today, yesterday, or 2 days ago)
+                if (daysSinceLastWorkout <= 2) {
+                    streak = 1;
+
+                    // Count backwards through sessions
                     for (let i = 1; i < sortedSessions.length; i++) {
-                        checkDate.setDate(checkDate.getDate() - 1);
-                        const checkDateStr = checkDate.toISOString().split('T')[0];
-                        if (sortedSessions.some(s => s.session_date === checkDateStr)) {
-                            streak++;
-                        } else {
+                        const currentSession = new Date(sortedSessions[i - 1].session_date);
+                        const previousSession = new Date(sortedSessions[i].session_date);
+
+                        // Calculate days between consecutive workouts
+                        const daysBetween = Math.floor(
+                            (currentSession.getTime() - previousSession.getTime()) / 86400000
+                        );
+
+                        // If gap is 3 days or more, streak is broken
+                        if (daysBetween > 3) {
                             break;
                         }
+
+                        streak++;
                     }
                 }
             }
@@ -143,34 +153,6 @@ export default function HomeScreen() {
         return date.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
     };
 
-    const handleGenerateDemoData = async () => {
-        Alert.alert(
-            'Generar Datos Demo',
-            '¿Crear 6 semanas de entrenamientos de ejemplo para capturas?',
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                    text: 'Limpiar primero',
-                    style: 'destructive',
-                    onPress: async () => {
-                        await clearWorkoutData();
-                        await generateDemoData();
-                        fetchHomeData();
-                        Alert.alert('✅ Listo', 'Datos demo generados');
-                    }
-                },
-                {
-                    text: 'Agregar',
-                    onPress: async () => {
-                        await generateDemoData();
-                        fetchHomeData();
-                        Alert.alert('✅ Listo', 'Datos demo agregados');
-                    }
-                },
-            ]
-        );
-    };
-
     return (
         <View style={styles.container}>
             {/* Header with Gradient */}
@@ -186,13 +168,6 @@ export default function HomeScreen() {
                         <Text style={styles.headerTitle}>Resumen</Text>
                     </View>
                     <View style={styles.headerButtons}>
-                        {/* Temporary Demo Button - Remove after screenshots */}
-                        <TouchableOpacity
-                            style={styles.demoButton}
-                            onPress={handleGenerateDemoData}
-                        >
-                            <Ionicons name="flask" size={18} color={COLORS.secondary} />
-                        </TouchableOpacity>
                         <View style={styles.streakBadgeContainer}>
                             <LinearGradient
                                 colors={['#F59E0B20', '#F59E0B10']}
@@ -497,14 +472,5 @@ const styles = StyleSheet.create({
     viewHistoryBtn: {
         marginTop: SPACING.md,
         alignItems: 'center',
-    },
-    demoButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 12,
-        backgroundColor: COLORS.secondary + '20',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: SPACING.sm,
     },
 });

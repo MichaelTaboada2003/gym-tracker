@@ -9,12 +9,21 @@ export interface SetData {
     rpe: number | null;
     isWarmup: boolean;
     isCompleted: boolean;
+    previousWeight?: number;
+    previousReps?: number;
+}
+
+export interface PreviousSetData {
+    setNumber: number;
+    weight: number;
+    reps: number;
 }
 
 export interface ExerciseInProgress {
     exercise: Exercise;
     sets: SetData[];
     previousBest: { weight: number; reps: number } | null;
+    previousSets: PreviousSetData[];
     targetSets?: number;
     targetReps?: string;
     restSeconds?: number;
@@ -40,7 +49,8 @@ interface WorkoutState {
     addExercise: (
         exercise: Exercise,
         previousBest?: { weight: number; reps: number } | null,
-        overrides?: { targetSets?: number; targetReps?: string; restSeconds?: number; notes?: string | null }
+        overrides?: { targetSets?: number; targetReps?: string; restSeconds?: number; notes?: string | null },
+        previousSets?: PreviousSetData[]
     ) => void;
     removeExercise: (index: number) => void;
     setCurrentExercise: (index: number) => void;
@@ -97,7 +107,8 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     addExercise: (
         exercise: Exercise,
         previousBest?: { weight: number; reps: number } | null,
-        overrides?: { targetSets?: number; targetReps?: string; restSeconds?: number; notes?: string | null }
+        overrides?: { targetSets?: number; targetReps?: string; restSeconds?: number; notes?: string | null },
+        previousSets?: PreviousSetData[]
     ) => {
         const targetSets = overrides?.targetSets || 3;
         const targetReps = overrides?.targetReps; // String "6-8"
@@ -107,22 +118,31 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         // Get rest seconds: from overrides, from exercise default, or fallback to 90
         const restSeconds = overrides?.restSeconds || (exercise as any).default_rest_seconds || 90;
 
+        const prevSets = previousSets || [];
+
         const newExercise: ExerciseInProgress = {
             exercise,
             previousBest: previousBest || null,
+            previousSets: prevSets,
             targetSets,
             targetReps,
             restSeconds,
             notes: overrides?.notes,
-            sets: Array(targetSets).fill(0).map((_, i) => ({
-                id: generateId(),
-                setNumber: i + 1,
-                weight: previousBest?.weight || 0,
-                reps: initialReps,
-                rpe: null,
-                isWarmup: false,
-                isCompleted: false,
-            })),
+            sets: Array(targetSets).fill(0).map((_, i) => {
+                // Get previous data for this specific set number
+                const prevSet = prevSets.find(ps => ps.setNumber === i + 1);
+                return {
+                    id: generateId(),
+                    setNumber: i + 1,
+                    weight: prevSet?.weight || previousBest?.weight || 0,
+                    reps: prevSet?.reps || initialReps,
+                    rpe: null,
+                    isWarmup: false,
+                    isCompleted: false,
+                    previousWeight: prevSet?.weight,
+                    previousReps: prevSet?.reps,
+                };
+            }),
         };
 
         set((state) => ({

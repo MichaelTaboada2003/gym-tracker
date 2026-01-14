@@ -117,7 +117,7 @@ export const BodyWeightWidget = () => {
                                     <LineChart
                                         data={widgetChartData}
                                         height={60}
-                                        width={130}
+                                        width={160}
                                         hideRules
                                         hideAxesAndRules
                                         hideDataPoints={false}
@@ -128,8 +128,8 @@ export const BodyWeightWidget = () => {
                                         curved
                                         isAnimated
                                         animationDuration={500}
-                                        initialSpacing={10}
-                                        endSpacing={10}
+                                        initialSpacing={5}
+                                        endSpacing={5}
                                         areaChart
                                         startFillColor={COLORS.primary + '40'}
                                         endFillColor={COLORS.primary + '05'}
@@ -419,8 +419,10 @@ const styles = StyleSheet.create({
     },
     chartWrapper: {
         height: 70,
+        flex: 1,
         justifyContent: 'center',
-        paddingRight: SPACING.sm,
+        alignItems: 'flex-end',
+        marginLeft: -SPACING.sm,
     },
     emptyChart: {
         width: 120,

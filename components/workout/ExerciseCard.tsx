@@ -232,15 +232,14 @@ export function ExerciseCard({
                 <Text style={[styles.setHeader, { width: 60 }]}>REPS</Text>
                 <View style={{ width: 32 }} />
             </View>
-
             {/* Sets */}
             <View style={styles.setsContainer}>
                 {sets.map((set, index) => (
                     <SetRow
                         key={set.id}
                         set={set}
-                        previousWeight={previousBest?.weight}
-                        previousReps={previousBest?.reps}
+                        previousWeight={set.previousWeight ?? previousBest?.weight}
+                        previousReps={set.previousReps ?? previousBest?.reps}
                         onUpdate={(data) => onUpdateSet(index, data)}
                         onComplete={() => handleCompleteSet(index)}
                         onDelete={() => onRemoveSet(index)}
