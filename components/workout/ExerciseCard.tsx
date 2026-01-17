@@ -52,56 +52,76 @@ export function ExerciseCard({
     const completedSets = sets.filter((s) => s.isCompleted && !s.isWarmup).length;
     const totalWorkSets = sets.filter((s) => !s.isWarmup).length;
 
-    // Rest timer state
+    // Rest timer state - usando timestamps para que funcione en background
     const [isResting, setIsResting] = useState(false);
     const [restTimeLeft, setRestTimeLeft] = useState(restSeconds);
-    const timerRef = useRef<NodeJS.Timeout | null>(null);
+    const [restStartTime, setRestStartTime] = useState<number | null>(null);
+    const [restDuration, setRestDuration] = useState(restSeconds);
+    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     // Calculate progress percentage
     const progress = totalWorkSets > 0 ? (completedSets / totalWorkSets) * 100 : 0;
 
     // Start rest timer
     const startRestTimer = () => {
-        setIsResting(true);
+        const now = Date.now();
+        setRestStartTime(now);
+        setRestDuration(restSeconds);
         setRestTimeLeft(restSeconds);
+        setIsResting(true);
     };
 
     // Stop rest timer
     const stopRestTimer = () => {
         setIsResting(false);
+        setRestStartTime(null);
         if (timerRef.current) {
             clearInterval(timerRef.current);
             timerRef.current = null;
         }
     };
 
-    // Add/subtract time
+    // Add/subtract time - ajusta la duracion total
     const adjustRestTime = (delta: number) => {
+        setRestDuration(prev => Math.max(0, prev + delta));
         setRestTimeLeft(prev => Math.max(0, prev + delta));
     };
 
-    // Handle rest timer countdown
+    // Handle rest timer countdown - usa timestamp para calcular tiempo restante
     useEffect(() => {
-        if (isResting && restTimeLeft > 0) {
-            timerRef.current = setInterval(() => {
-                setRestTimeLeft(prev => {
-                    if (prev <= 1) {
-                        // Timer finished
-                        Vibration.vibrate([0, 500, 200, 500]); // Vibrate pattern
-                        setIsResting(false);
-                        return 0;
+        if (isResting && restStartTime) {
+            // Actualizar inmediatamente
+            const updateTimer = () => {
+                const elapsed = Math.floor((Date.now() - restStartTime) / 1000);
+                const remaining = Math.max(0, restDuration - elapsed);
+                setRestTimeLeft(remaining);
+
+                if (remaining <= 0) {
+                    // Timer finished
+                    Vibration.vibrate([0, 500, 200, 500]); // Vibrate pattern
+                    setIsResting(false);
+                    setRestStartTime(null);
+                    if (timerRef.current) {
+                        clearInterval(timerRef.current);
+                        timerRef.current = null;
                     }
-                    return prev - 1;
-                });
-            }, 1000);
+                }
+            };
+
+            // Actualizar inmediatamente (por si volvemos del background)
+            updateTimer();
+
+            // Luego actualizar cada 100ms para precision
+            timerRef.current = setInterval(updateTimer, 100);
         }
 
         return () => {
             if (timerRef.current) {
                 clearInterval(timerRef.current);
+                timerRef.current = null;
             }
         };
-    }, [isResting]);
+    }, [isResting, restStartTime, restDuration]);
 
     // Calculate timer progress
     const timerProgress = restSeconds > 0 ? (restTimeLeft / restSeconds) * 100 : 0;
