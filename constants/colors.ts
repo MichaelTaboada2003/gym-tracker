@@ -80,3 +80,31 @@ export const BORDER_RADIUS = {
     xl: 24,
     full: 9999,
 } as const;
+
+/**
+ * One colour per muscle group, keyed by the Spanish label stored on exercises.
+ *
+ * This used to be copy-pasted into six screens with three different palettes,
+ * so the same muscle rendered in different colours depending on where you were.
+ */
+export const MUSCLE_COLORS: Record<string, string> = {
+    Pecho: '#F87171',
+    Espalda: '#60A5FA',
+    Hombros: '#FBBF24',
+    Bíceps: '#34D399',
+    Tríceps: '#2DD4BF',
+    Piernas: '#A78BFA',
+    Glúteos: '#F472B6',
+    Core: '#FB923C',
+    Cardio: '#38BDF8',
+    Otros: '#94A3B8',
+};
+
+/** Colour for a muscle group label, falling back to the neutral "Otros" tone. */
+export function getMuscleColor(muscleGroup?: string | null): string {
+    if (!muscleGroup) return MUSCLE_COLORS.Otros;
+    return MUSCLE_COLORS[muscleGroup] ?? MUSCLE_COLORS.Otros;
+}
+
+/** Minimum tappable size (iOS HIG / Material both land at ~44dp). */
+export const HIT_SIZE = 44;

@@ -1,21 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
 import { Button } from '../ui/Button';
-import { Routine, Plan } from '../../lib/database.types';
+import { Routine } from '../../lib/database.types';
 import { useRoutines } from '../../hooks/useRoutines';
-import { PlanWithRoutines } from '../../hooks/usePlans';
+import { PlanWithRoutines, PlanDayInput } from '../../hooks/usePlans';
+import { formatMinutes } from '../../lib/utils';
+
+/** A plan cycle longer than a fortnight stops being a cycle. */
+const MAX_DAYS = 14;
 
 interface CreatePlanModalProps {
     visible: boolean;
     onClose: () => void;
-    onCreate?: (name: string, description: string | null, durationDays: number, routines: { day: number; routineId: string; notes?: string }[]) => Promise<any>;
-    onUpdate?: (id: string, name: string, description: string | null, durationDays: number, routines: { day: number; routineId: string; notes?: string }[]) => Promise<any>;
+    onCreate?: (name: string, description: string | null, durationDays: number, days: PlanDayInput[]) => Promise<unknown>;
+    onUpdate?: (
+        id: string,
+        name: string,
+        description: string | null,
+        durationDays: number,
+        days: PlanDayInput[]
+    ) => Promise<unknown>;
     initialData?: PlanWithRoutines | null;
 }
 
 export function CreatePlanModal({ visible, onClose, onCreate, onUpdate, initialData }: CreatePlanModalProps) {
+    const insets = useSafeAreaInsets();
     const [step, setStep] = useState(1);
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
@@ -82,8 +94,8 @@ export function CreatePlanModal({ visible, onClose, onCreate, onUpdate, initialD
             Alert.alert('Error', 'Por favor ingresa un nombre para el programa');
             return;
         }
-        if (numDays < 1) {
-            Alert.alert('Error', 'El plan debe tener al menos 1 día');
+        if (numDays < 1 || numDays > MAX_DAYS) {
+            Alert.alert('Días no válidos', `El ciclo debe tener entre 1 y ${MAX_DAYS} días.`);
             return;
         }
 
@@ -157,6 +169,11 @@ export function CreatePlanModal({ visible, onClose, onCreate, onUpdate, initialD
                         </TouchableOpacity>
                     </View>
                     <ScrollView style={styles.routinesList}>
+                        {routines.length === 0 && (
+                            <Text style={styles.noRoutinesText}>
+                                Todavía no tienes rutinas. Créalas primero para poder asignarlas.
+                            </Text>
+                        )}
                         {routines.map(routine => (
                             <TouchableOpacity
                                 key={routine.id}
@@ -208,9 +225,10 @@ export function CreatePlanModal({ visible, onClose, onCreate, onUpdate, initialD
                                     style={styles.input}
                                     value={numDays.toString()}
                                     onChangeText={(text) => {
-                                        const days = parseInt(text) || 0;
-                                        setNumDays(days);
+                                        const days = parseInt(text.replace(/[^0-9]/g, ''), 10);
+                                        setNumDays(Number.isFinite(days) ? Math.min(days, MAX_DAYS) : 0);
                                     }}
+                                    maxLength={2}
                                     placeholder="Ej: 7"
                                     placeholderTextColor={COLORS.textMuted}
                                     keyboardType="numeric"
@@ -240,15 +258,33 @@ export function CreatePlanModal({ visible, onClose, onCreate, onUpdate, initialD
 
                                     <View style={styles.dayContent}>
                                         {day.routine ? (
-                                            <View style={styles.assignedRoutine}>
-                                                <View style={{ flex: 1 }}>
-                                                    <Text style={styles.assignedName}>{day.routine.name}</Text>
-                                                    <Text style={styles.assignedDuration}>~{day.routine.estimated_duration} min</Text>
+                                            <>
+                                                <View style={styles.assignedRoutine}>
+                                                    <View style={{ flex: 1 }}>
+                                                        <Text style={styles.assignedName}>{day.routine.name}</Text>
+                                                        <Text style={styles.assignedDuration}>
+                                                            ~{formatMinutes(day.routine.estimated_duration)}
+                                                        </Text>
+                                                    </View>
+                                                    <TouchableOpacity
+                                                        onPress={() => handleRemoveRoutine(day.day)}
+                                                        accessibilityLabel={`Quitar rutina del día ${day.day}`}
+                                                    >
+                                                        <Ionicons name="close-circle" size={20} color={COLORS.textMuted} />
+                                                    </TouchableOpacity>
                                                 </View>
-                                                <TouchableOpacity onPress={() => handleRemoveRoutine(day.day)}>
-                                                    <Ionicons name="close-circle" size={20} color={COLORS.textMuted} />
-                                                </TouchableOpacity>
-                                            </View>
+                                                <TextInput
+                                                    style={styles.dayNotesInput}
+                                                    value={day.notes}
+                                                    onChangeText={(notes) =>
+                                                        setPlanDays((prev) =>
+                                                            prev.map((d) => (d.day === day.day ? { ...d, notes } : d))
+                                                        )
+                                                    }
+                                                    placeholder="Nota para este día (opcional)…"
+                                                    placeholderTextColor={COLORS.textMuted}
+                                                />
+                                            </>
                                         ) : (
                                             <TouchableOpacity
                                                 style={styles.addRoutineBtn}
@@ -266,7 +302,7 @@ export function CreatePlanModal({ visible, onClose, onCreate, onUpdate, initialD
                         </ScrollView>
                     )}
 
-                    <View style={styles.footer}>
+                    <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, SPACING.md) }]}>
                         {step === 2 && (
                             <Button
                                 title="Atrás"
@@ -292,6 +328,22 @@ export function CreatePlanModal({ visible, onClose, onCreate, onUpdate, initialD
 }
 
 const styles = StyleSheet.create({
+    dayNotesInput: {
+        marginTop: SPACING.xs,
+        backgroundColor: COLORS.surfaceLight,
+        borderRadius: BORDER_RADIUS.sm,
+        paddingHorizontal: SPACING.sm,
+        paddingVertical: 8,
+        color: COLORS.textPrimary,
+        fontSize: FONT_SIZES.xs,
+    },
+    noRoutinesText: {
+        padding: SPACING.lg,
+        textAlign: 'center',
+        color: COLORS.textMuted,
+        fontSize: FONT_SIZES.sm,
+        lineHeight: 20,
+    },
     modalContainer: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.8)',

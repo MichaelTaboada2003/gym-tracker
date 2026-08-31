@@ -170,50 +170,45 @@ export function quickEstimateMinutes(
 }
 
 /**
- * Format duration as human-readable string
- */
-export function formatDuration(totalSeconds: number): string {
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-
-    if (hours > 0) {
-        return `${hours}h ${minutes}m`;
-    }
-    if (minutes > 0) {
-        return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
-    }
-    return `${seconds}s`;
-}
-
-/**
- * Format minutes as human-readable string (simplified)
- */
-export function formatMinutes(minutes: number): string {
-    if (minutes >= 60) {
-        const hours = Math.floor(minutes / 60);
-        const mins = minutes % 60;
-        return mins > 0 ? `${hours}h ${mins}min` : `${hours}h`;
-    }
-    return `${minutes} min`;
-}
-
-/**
- * Get a color based on duration intensity
+ * Duration bucket used for the colour + label badge on routine cards.
  */
 export function getDurationColor(minutes: number): string {
-    if (minutes <= 30) return '#10B981'; // Green - Quick
-    if (minutes <= 60) return '#3B82F6'; // Blue - Moderate
-    if (minutes <= 90) return '#F59E0B'; // Amber - Long
-    return '#EF4444'; // Red - Very Long
+    if (minutes <= 30) return '#10B981'; // Rápido
+    if (minutes <= 60) return '#3B82F6'; // Moderado
+    if (minutes <= 90) return '#F59E0B'; // Largo
+    return '#EF4444'; // Muy largo
 }
 
-/**
- * Get duration intensity label
- */
 export function getDurationLabel(minutes: number): string {
     if (minutes <= 30) return 'Rápido';
     if (minutes <= 60) return 'Moderado';
     if (minutes <= 90) return 'Largo';
     return 'Muy Largo';
+}
+
+/**
+ * Estimated minutes for a routine, straight from its stored exercise rows.
+ *
+ * This is what `Routine.estimated_duration` is derived from, so the number on a
+ * routine card and the number inside the builder always agree.
+ */
+export function estimateRoutineMinutes(
+    exercises: {
+        exerciseName?: string;
+        sets: number;
+        reps: number;
+        timePerRepSeconds?: number;
+        restBetweenSetsSeconds?: number;
+    }[]
+): number {
+    return calculateRoutineDuration(
+        exercises.map((ex, index) => ({
+            exerciseId: String(index),
+            exerciseName: ex.exerciseName ?? '',
+            sets: ex.sets,
+            reps: ex.reps,
+            timePerRepSeconds: ex.timePerRepSeconds ?? DEFAULT_TIME_PER_REP,
+            restBetweenSetsSeconds: ex.restBetweenSetsSeconds ?? DEFAULT_REST_BETWEEN_SETS,
+        }))
+    ).totalMinutes;
 }

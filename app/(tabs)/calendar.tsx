@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import React, { useCallback, useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert } from 'react-native';
 import { Calendar, DateData, LocaleConfig } from 'react-native-calendars';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
+import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, getMuscleColor } from '../../constants/colors';
 import { Card } from '../../components/ui/Card';
-import { storage } from '../../lib/localDatabase';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { useRefreshOnFocus } from '../../hooks/useRefreshOnFocus';
+import { storage, deleteSessionCascade } from '../../lib/localDatabase';
+import { formatLongDate, formatMinutes, formatVolume, formatVolumeShort, toISODate } from '../../lib/utils';
 
 // Configure Spanish locale
 LocaleConfig.locales['es'] = {
@@ -45,10 +47,11 @@ interface WorkoutLog {
 }
 
 interface DayWorkout {
-    session: WorkoutSession;
+    sessions: WorkoutSession[];
     exercises: { name: string; muscle_group: string; sets: number; volume: number }[];
     totalVolume: number;
     totalSets: number;
+    totalMinutes: number;
 }
 
 export default function CalendarScreen() {
@@ -58,9 +61,9 @@ export default function CalendarScreen() {
     const [logs, setLogs] = useState<WorkoutLog[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedDayWorkout, setSelectedDayWorkout] = useState<DayWorkout | null>(null);
-    const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().slice(0, 7));
+    const [currentMonth, setCurrentMonth] = useState(toISODate().slice(0, 7));
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         try {
             setLoading(true);
 
@@ -95,11 +98,13 @@ export default function CalendarScreen() {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
-        fetchData();
-    }, []);
+        void fetchData();
+    }, [fetchData]);
+
+    useRefreshOnFocus(fetchData);
 
     // Build marked dates from sessions
     const workoutDates: Record<string, { marked: boolean; dotColor: string }> = {};
@@ -110,56 +115,63 @@ export default function CalendarScreen() {
         };
     });
 
+    /**
+     * Removes a mis-logged session. Nothing else in the app could delete one,
+     * so a fat-fingered workout stayed in the stats forever.
+     */
+    const confirmDeleteSession = (sessionId: string, label: string) => {
+        Alert.alert('Eliminar entrenamiento', `Se borrará "${label}" y todas sus series.`, [
+            { text: 'Cancelar', style: 'cancel' },
+            {
+                text: 'Eliminar',
+                style: 'destructive',
+                onPress: async () => {
+                    await deleteSessionCascade(sessionId);
+                    setSelectedDayWorkout(null);
+                    setSelectedDate(null);
+                    await fetchData();
+                },
+            },
+        ]);
+    };
+
     const handleDayPress = (day: DateData) => {
         setSelectedDate(day.dateString);
 
-        const session = sessions.find(s => s.session_date === day.dateString);
-
-        if (session) {
-            const sessionLogs = logs.filter(l => l.session_id === session.id && !l.is_warmup);
-
-            const exerciseMap = new Map<string, { name: string; muscle_group: string; sets: number; volume: number }>();
-
-            sessionLogs.forEach(log => {
-                const exerciseName = log.exerciseName || 'Ejercicio';
-                const muscleGroup = log.muscleGroup || '';
-                const volume = Number(log.weight_kg) * log.reps;
-
-                if (exerciseMap.has(log.exercise_id)) {
-                    const existing = exerciseMap.get(log.exercise_id)!;
-                    existing.sets += 1;
-                    existing.volume += volume;
-                } else {
-                    exerciseMap.set(log.exercise_id, {
-                        name: exerciseName,
-                        muscle_group: muscleGroup,
-                        sets: 1,
-                        volume,
-                    });
-                }
-            });
-
-            const exercises = Array.from(exerciseMap.values());
-            const totalVolume = exercises.reduce((sum, e) => sum + e.volume, 0);
-            const totalSets = exercises.reduce((sum, e) => sum + e.sets, 0);
-
-            setSelectedDayWorkout({
-                session: { ...session, routineName: session.routineName },
-                exercises,
-                totalVolume,
-                totalSets,
-            });
-        } else {
+        // Two sessions on one day used to hide the second one entirely.
+        const daySessions = sessions.filter((s) => s.session_date === day.dateString);
+        if (daySessions.length === 0) {
             setSelectedDayWorkout(null);
+            return;
         }
-    };
 
-    const formatDate = (dateStr: string) => {
-        const date = new Date(dateStr);
-        return date.toLocaleDateString('es-ES', {
-            weekday: 'long',
-            day: 'numeric',
-            month: 'long'
+        const sessionIds = new Set(daySessions.map((s) => s.id));
+        const dayLogs = logs.filter((l) => sessionIds.has(l.session_id) && !l.is_warmup);
+
+        const exerciseMap = new Map<string, { name: string; muscle_group: string; sets: number; volume: number }>();
+        dayLogs.forEach((log) => {
+            const volume = Number(log.weight_kg) * log.reps;
+            const existing = exerciseMap.get(log.exercise_id);
+            if (existing) {
+                existing.sets += 1;
+                existing.volume += volume;
+            } else {
+                exerciseMap.set(log.exercise_id, {
+                    name: log.exerciseName || 'Ejercicio',
+                    muscle_group: log.muscleGroup || '',
+                    sets: 1,
+                    volume,
+                });
+            }
+        });
+
+        const exercises = Array.from(exerciseMap.values());
+        setSelectedDayWorkout({
+            sessions: daySessions,
+            exercises,
+            totalVolume: exercises.reduce((sum, e) => sum + e.volume, 0),
+            totalSets: exercises.reduce((sum, e) => sum + e.sets, 0),
+            totalMinutes: daySessions.reduce((sum, s) => sum + (s.duration_minutes || 0), 0),
         });
     };
 
@@ -170,43 +182,13 @@ export default function CalendarScreen() {
         return sum + sessionLogs.reduce((s, l) => s + Number(l.weight_kg) * l.reps, 0);
     }, 0);
 
-    const getMuscleColor = (muscle: string) => {
-        const colors: Record<string, string> = {
-            'Pecho': COLORS.chest || '#EF4444',
-            'Espalda': COLORS.back || '#3B82F6',
-            'Hombros': COLORS.shoulders || '#F59E0B',
-            'Bíceps': COLORS.arms || '#8B5CF6',
-            'Tríceps': COLORS.arms || '#8B5CF6',
-            'Piernas': COLORS.legs || '#10B981',
-            'Glúteos': COLORS.legs || '#10B981',
-            'Core': COLORS.core || '#EC4899',
-            'Cardio': COLORS.cardio || '#06B6D4',
-        };
-        return colors[muscle] || COLORS.primary;
-    };
-
     return (
         <View style={styles.container}>
-            {/* Header with Gradient and Back Button */}
-            <LinearGradient
-                colors={[COLORS.primary + '15', 'transparent']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.header}
-            >
-                <View style={styles.headerContent}>
-                    <TouchableOpacity
-                        onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/stats')}
-                        style={styles.backButton}
-                    >
-                        <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
-                    </TouchableOpacity>
-                    <View style={styles.headerTextContainer}>
-                        <Text style={styles.headerSubtitle}>HISTORIAL</Text>
-                        <Text style={styles.headerTitle}>Calendario</Text>
-                    </View>
-                </View>
-            </LinearGradient>
+            <ScreenHeader
+                eyebrow="Historial"
+                title="Calendario"
+                onBack={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/stats'))}
+            />
 
             <ScrollView
                 style={styles.scrollView}
@@ -255,7 +237,7 @@ export default function CalendarScreen() {
                 {/* Selected Day Details */}
                 {selectedDate && (
                     <Card style={styles.detailsCard}>
-                        <Text style={styles.selectedDateTitle}>{formatDate(selectedDate)}</Text>
+                        <Text style={styles.selectedDateTitle}>{formatLongDate(selectedDate)}</Text>
 
                         {selectedDayWorkout ? (
                             <View>
@@ -263,7 +245,7 @@ export default function CalendarScreen() {
                                     <View style={styles.summaryItem}>
                                         <Ionicons name="time-outline" size={16} color={COLORS.textSecondary} />
                                         <Text style={styles.summaryText}>
-                                            {selectedDayWorkout.session.duration_minutes || 0} min
+                                            {formatMinutes(selectedDayWorkout.totalMinutes)}
                                         </Text>
                                     </View>
                                     <View style={styles.summaryItem}>
@@ -275,19 +257,28 @@ export default function CalendarScreen() {
                                     <View style={styles.summaryItem}>
                                         <Ionicons name="barbell-outline" size={16} color={COLORS.textSecondary} />
                                         <Text style={styles.summaryText}>
-                                            {Math.round(selectedDayWorkout.totalVolume)} kg
+                                            {formatVolume(selectedDayWorkout.totalVolume)}
                                         </Text>
                                     </View>
                                 </View>
 
-                                {selectedDayWorkout.session.routineName && (
-                                    <View style={styles.routineBadge}>
-                                        <Ionicons name="clipboard" size={14} color={COLORS.primary} />
-                                        <Text style={styles.routineName}>
-                                            {selectedDayWorkout.session.routineName}
-                                        </Text>
-                                    </View>
-                                )}
+                                {selectedDayWorkout.sessions.map((session) => {
+                                    const label = session.routineName || 'Entrenamiento libre';
+                                    return (
+                                        <View key={session.id} style={styles.routineBadge}>
+                                            <Ionicons name="clipboard" size={14} color={COLORS.primary} />
+                                            <Text style={styles.routineName}>{label}</Text>
+                                            <TouchableOpacity
+                                                onPress={() => confirmDeleteSession(session.id, label)}
+                                                style={styles.deleteSessionBtn}
+                                                accessibilityRole="button"
+                                                accessibilityLabel={`Eliminar ${label}`}
+                                            >
+                                                <Ionicons name="trash-outline" size={14} color={COLORS.error} />
+                                            </TouchableOpacity>
+                                        </View>
+                                    );
+                                })}
 
                                 <Text style={styles.exercisesTitle}>Ejercicios realizados</Text>
                                 {selectedDayWorkout.exercises.map((exercise, index) => (
@@ -296,7 +287,7 @@ export default function CalendarScreen() {
                                         <View style={styles.exerciseInfo}>
                                             <Text style={styles.exerciseName}>{exercise.name}</Text>
                                             <Text style={styles.exerciseMeta}>
-                                                {exercise.sets} series • {Math.round(exercise.volume)} kg
+                                                {exercise.sets} series · {formatVolume(exercise.volume)}
                                             </Text>
                                         </View>
                                     </View>
@@ -325,7 +316,7 @@ export default function CalendarScreen() {
                             <Text style={styles.monthStatLabel}>Días activos</Text>
                         </View>
                         <View style={styles.monthStat}>
-                            <Text style={styles.monthStatValue}>{monthVolume >= 1000 ? `${(monthVolume / 1000).toFixed(1)}k` : Math.round(monthVolume)}</Text>
+                            <Text style={styles.monthStatValue}>{formatVolumeShort(monthVolume)}</Text>
                             <Text style={styles.monthStatLabel}>Volumen (kg)</Text>
                         </View>
                     </View>
@@ -339,40 +330,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: COLORS.background,
-    },
-    header: {
-        paddingHorizontal: SPACING.lg,
-        paddingTop: SPACING.xl,
-        paddingBottom: SPACING.lg,
-    },
-    headerContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: SPACING.md,
-    },
-    backButton: {
-        width: 40,
-        height: 40,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: BORDER_RADIUS.md,
-        backgroundColor: COLORS.surfaceLight,
-    },
-    headerTextContainer: {
-        flex: 1,
-    },
-    headerSubtitle: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: COLORS.primary,
-        letterSpacing: 3,
-        marginBottom: 4,
-        textTransform: 'uppercase',
-    },
-    headerTitle: {
-        fontSize: 36,
-        fontWeight: '800',
-        color: COLORS.textPrimary,
     },
     scrollView: {
         flex: 1,
@@ -424,6 +381,13 @@ const styles = StyleSheet.create({
         paddingVertical: SPACING.xs,
         borderRadius: BORDER_RADIUS.full,
         marginBottom: SPACING.md,
+    },
+    deleteSessionBtn: {
+        marginLeft: 'auto',
+        width: 30,
+        height: 30,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     routineName: {
         fontSize: FONT_SIZES.sm,

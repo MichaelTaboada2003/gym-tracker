@@ -1,182 +1,136 @@
-import { useState, useEffect } from 'react';
-import { storage, generateId } from '../lib/localDatabase';
+import { useCallback, useEffect, useState } from 'react';
+import { storage, generateId, deletePlanCascade } from '../lib/localDatabase';
 import { Plan, PlanRoutine, Routine } from '../lib/database.types';
 
 export type PlanWithRoutines = Plan & {
     items: (PlanRoutine & { routine: Routine })[];
 };
 
+/** One day assignment coming out of the plan builder. */
+export interface PlanDayInput {
+    day: number;
+    routineId: string;
+    notes?: string | null;
+}
+
+const MISSING_ROUTINE = (id: string): Routine => ({
+    id,
+    name: 'Rutina eliminada',
+    description: null,
+    estimated_duration: 0,
+    created_at: '',
+    updated_at: '',
+});
+
 export function usePlans() {
     const [plans, setPlans] = useState<Plan[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const fetchPlans = async () => {
+    const fetchPlans = useCallback(async () => {
         try {
-            setLoading(true);
-            const result = await storage.plans.getAll() as Plan[];
-            // Sort by created_at descending
-            const sorted = result.sort((a, b) =>
-                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-            );
-            setPlans(sorted);
+            const rows = await storage.plans.getAll();
+            setPlans(rows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
         } catch (error) {
-            console.error('Error fetching plans:', error);
+            console.error('[plans] load failed:', error);
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
-    const getPlanDetails = async (id: string): Promise<PlanWithRoutines | null> => {
+    const getPlanDetails = useCallback(async (id: string): Promise<PlanWithRoutines | null> => {
         try {
-            // 1. Get Plan
-            const plan = await storage.plans.getById(id) as Plan | null;
+            const plan = await storage.plans.getById(id);
             if (!plan) return null;
 
-            // 2. Get Routines for this plan
-            const planRoutines = await storage.planRoutines.getByPlanId(id) as any[];
-            const allRoutines = await storage.routines.getAll() as Routine[];
-
-            // 3. Join data
-            const items = planRoutines
-                .sort((a, b) => a.day_number - b.day_number)
-                .map((pr) => {
-                    const routine = allRoutines.find((r) => r.id === pr.routine_id);
-                    return {
-                        ...pr,
-                        routine: routine || {
-                            id: pr.routine_id,
-                            name: 'Rutina no encontrada',
-                            description: null,
-                            estimated_duration: 0,
-                            created_at: '',
-                            updated_at: '',
-                        },
-                    };
-                });
+            const [assignments, routines] = await Promise.all([
+                storage.planRoutines.getAll(),
+                storage.routines.getAll(),
+            ]);
+            const routinesById = new Map(routines.map((r) => [r.id, r]));
 
             return {
                 ...plan,
-                items,
+                items: assignments
+                    .filter((pr) => pr.plan_id === id)
+                    .sort((a, b) => a.day_number - b.day_number)
+                    .map((pr) => ({ ...pr, routine: routinesById.get(pr.routine_id) ?? MISSING_ROUTINE(pr.routine_id) })),
             };
         } catch (error) {
-            console.error('Error fetching plan details:', error);
+            console.error('[plans] detail failed:', error);
             return null;
         }
-    };
+    }, []);
 
-    const createPlan = async (
-        name: string,
-        description: string | null,
-        routines: { day: number; routineId: string; notes?: string }[]
-    ) => {
-        try {
-            setLoading(true);
+    /**
+     * `durationDays` is a real parameter now.
+     *
+     * The builder always passed it, but the hook's signature omitted it, so the
+     * day count landed in the `routines` slot and iterating it threw — plan
+     * creation failed outright with "No se pudo guardar el programa".
+     */
+    const createPlan = useCallback(
+        async (name: string, description: string | null, durationDays: number, days: PlanDayInput[]) => {
             const planId = generateId();
             const now = new Date().toISOString();
 
-            // 1. Create Plan
-            const newPlan: Plan = {
+            const plan: Plan = {
                 id: planId,
-                name,
-                description,
-                duration_days: 7,
+                name: name.trim(),
+                description: description?.trim() || null,
+                duration_days: Math.max(1, durationDays || 7),
                 created_at: now,
                 updated_at: now,
             };
-            await storage.plans.add(newPlan);
 
-            // 2. Create Plan Routines
-            const routinesList = routines || [];
-            for (const r of routinesList) {
-                const planRoutine = {
-                    id: generateId(),
-                    plan_id: planId,
-                    routine_id: r.routineId,
-                    day_number: r.day,
-                    notes: r.notes || null,
-                    created_at: now,
-                };
-                await storage.planRoutines.add(planRoutine);
-            }
-
+            await storage.plans.add(plan);
+            await storage.planRoutines.addMany(toRows(planId, days, now));
             await fetchPlans();
-            return newPlan;
-        } catch (error) {
-            console.error('Error creating plan:', error);
-            throw error;
-        } finally {
-            setLoading(false);
-        }
-    };
+            return plan;
+        },
+        [fetchPlans]
+    );
 
-    const updatePlan = async (
-        id: string,
-        name: string,
-        description: string | null,
-        durationDays: number,
-        routines: { day: number; routineId: string; notes?: string }[]
-    ) => {
-        try {
-            setLoading(true);
+    const updatePlan = useCallback(
+        async (
+            id: string,
+            name: string,
+            description: string | null,
+            durationDays: number,
+            days: PlanDayInput[]
+        ) => {
             const now = new Date().toISOString();
 
-            // 1. Update Plan Metadata
             await storage.plans.update(id, {
-                name,
-                description,
-                duration_days: durationDays,
+                name: name.trim(),
+                description: description?.trim() || null,
+                duration_days: Math.max(1, durationDays || 7),
                 updated_at: now,
             });
-
-            // 2. Delete existing routines for this plan
-            await storage.planRoutines.deleteByPlanId(id);
-
-            // 3. Insert new routines
-            const routinesList = routines || [];
-            for (const r of routinesList) {
-                const planRoutine = {
-                    id: generateId(),
-                    plan_id: id,
-                    routine_id: r.routineId,
-                    day_number: r.day,
-                    notes: r.notes || null,
-                    created_at: now,
-                };
-                await storage.planRoutines.add(planRoutine);
-            }
-
+            await storage.planRoutines.replaceForPlan(id, toRows(id, days, now));
             await fetchPlans();
-            return true;
-        } catch (error) {
-            console.error('Error updating plan:', error);
-            throw error;
-        } finally {
-            setLoading(false);
-        }
-    };
+        },
+        [fetchPlans]
+    );
 
-    const deletePlan = async (id: string) => {
-        try {
-            await storage.planRoutines.deleteByPlanId(id);
-            await storage.plans.delete(id);
-            setPlans((prev) => prev.filter((p) => p.id !== id));
-        } catch (error) {
-            console.error('Error deleting plan:', error);
-            throw error;
-        }
-    };
+    const deletePlan = useCallback(async (id: string) => {
+        await deletePlanCascade(id);
+        setPlans((prev) => prev.filter((p) => p.id !== id));
+    }, []);
 
     useEffect(() => {
         fetchPlans();
-    }, []);
+    }, [fetchPlans]);
 
-    return {
-        plans,
-        loading,
-        fetchPlans,
-        getPlanDetails,
-        createPlan,
-        updatePlan,
-        deletePlan,
-    };
+    return { plans, loading, fetchPlans, getPlanDetails, createPlan, updatePlan, deletePlan };
+}
+
+function toRows(planId: string, days: PlanDayInput[], now: string): PlanRoutine[] {
+    return (days ?? []).map((day) => ({
+        id: generateId(),
+        plan_id: planId,
+        routine_id: day.routineId,
+        day_number: day.day,
+        notes: day.notes?.trim() || null,
+        created_at: now,
+    }));
 }

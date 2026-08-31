@@ -1,76 +1,78 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
-import { useRoutines, RoutineWithExercises } from '../../hooks/useRoutines';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, getMuscleColor } from '../../constants/colors';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { EmptyState } from '../../components/ui/EmptyState';
 import { Button } from '../../components/ui/Button';
+import { CreateRoutineModal } from '../../components/routines/CreateRoutineModal';
+import { useRoutines, RoutineWithExercises } from '../../hooks/useRoutines';
+import { formatMinutes, formatSeconds } from '../../lib/utils';
 
-// Helper to format rest time from notes JSON or number
-const formatRestTime = (notes: string | null, defaultRest?: number): string => {
-    let restSeconds = defaultRest || 90;
-
-    if (notes) {
-        try {
-            const parsed = JSON.parse(notes);
-            if (parsed.restTime) {
-                restSeconds = parsed.restTime;
-            }
-        } catch {
-            // Notes is just a regular string, not JSON
-            return '';
-        }
-    }
-
-    if (restSeconds >= 60) {
-        const mins = Math.floor(restSeconds / 60);
-        const secs = restSeconds % 60;
-        return secs > 0 ? `${mins}m ${secs}s` : `${mins} min`;
-    }
-    return `${restSeconds}s`;
-};
-
-// Helper to get muscle group color
-const getMuscleGroupColor = (muscleGroup: string): string => {
-    const colors: Record<string, string> = {
-        'Pecho': '#EF4444',
-        'Espalda': '#3B82F6',
-        'Hombros': '#F59E0B',
-        'Bíceps': '#8B5CF6',
-        'Tríceps': '#A855F7',
-        'Piernas': '#10B981',
-        'Core': '#EC4899',
-        'Cardio': '#06B6D4',
-    };
-    return colors[muscleGroup] || COLORS.textMuted;
-};
-
-export default function RoutineDetailsScreen() {
-    const { id } = useLocalSearchParams();
+export default function RoutineDetailScreen() {
+    const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
-    const { getRoutineDetails } = useRoutines();
+    const insets = useSafeAreaInsets();
+    const { getRoutineDetails, updateRoutine, deleteRoutine, duplicateRoutine } = useRoutines();
 
     const [routine, setRoutine] = useState<RoutineWithExercises | null>(null);
     const [loading, setLoading] = useState(true);
+    const [editing, setEditing] = useState(false);
 
-    useEffect(() => {
-        if (id) {
-            loadRoutine();
-        }
-    }, [id]);
-
-    const loadRoutine = async () => {
-        setLoading(true);
-        const data = await getRoutineDetails(id as string);
+    const load = useCallback(async () => {
+        if (!id) return;
+        const data = await getRoutineDetails(id);
         setRoutine(data);
         setLoading(false);
+    }, [id, getRoutineDetails]);
+
+    useEffect(() => {
+        void load();
+    }, [load]);
+
+    const goBack = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/routines'));
+
+    const openMenu = () => {
+        if (!routine) return;
+        Alert.alert(routine.name, undefined, [
+            { text: 'Editar', onPress: () => setEditing(true) },
+            {
+                text: 'Duplicar',
+                onPress: async () => {
+                    const copy = await duplicateRoutine(routine.id);
+                    if (copy) router.replace(`/routine/${copy.id}`);
+                },
+            },
+            {
+                text: 'Eliminar',
+                style: 'destructive',
+                onPress: () =>
+                    Alert.alert(
+                        'Eliminar rutina',
+                        'Se quitará también de los programas que la usen. El historial se conserva.',
+                        [
+                            { text: 'Cancelar', style: 'cancel' },
+                            {
+                                text: 'Eliminar',
+                                style: 'destructive',
+                                onPress: async () => {
+                                    await deleteRoutine(routine.id);
+                                    goBack();
+                                },
+                            },
+                        ]
+                    ),
+            },
+            { text: 'Cancelar', style: 'cancel' },
+        ]);
     };
 
     if (loading) {
         return (
-            <View style={styles.centerContainer}>
+            <View style={styles.centered}>
                 <ActivityIndicator size="large" color={COLORS.primary} />
             </View>
         );
@@ -78,139 +80,202 @@ export default function RoutineDetailsScreen() {
 
     if (!routine) {
         return (
-            <View style={styles.centerContainer}>
-                <Ionicons name="alert-circle-outline" size={64} color={COLORS.textMuted} />
-                <Text style={styles.errorText}>Rutina no encontrada</Text>
-                <Button title="Volver" onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/routines')} />
+            <View style={styles.container}>
+                <ScreenHeader title="Rutina" onBack={goBack} />
+                <View style={styles.content}>
+                    <EmptyState
+                        icon="alert-circle-outline"
+                        title="Rutina no encontrada"
+                        message="Puede que se haya eliminado."
+                        actionLabel="Volver"
+                        onAction={goBack}
+                    />
+                </View>
             </View>
         );
     }
 
-    // Calculate total sets and volume estimate
     const totalSets = routine.routine_exercises.reduce((sum, re) => sum + re.target_sets, 0);
+    const muscleGroups = Array.from(
+        new Set(routine.routine_exercises.map((re) => re.exercise.muscle_group).filter(Boolean))
+    );
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
-            <Stack.Screen options={{ headerShown: false }} />
+        <View style={styles.container}>
+            <ScreenHeader
+                eyebrow="Rutina"
+                title={routine.name}
+                onBack={goBack}
+                actions={[
+                    { icon: 'ellipsis-horizontal', accessibilityLabel: 'Opciones de la rutina', onPress: openMenu },
+                ]}
+            />
 
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Detalles de Rutina</Text>
-                <View style={{ width: 40 }} />
-            </View>
-
-            <ScrollView contentContainerStyle={styles.content}>
-                {/* Routine Info Card */}
+            <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
                 <LinearGradient
-                    colors={[COLORS.surfaceLight, COLORS.surface]}
-                    style={styles.routineInfoCard}
+                    colors={[routine.durationColor + '22', COLORS.surface]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.heroCard}
                 >
-                    <Text style={styles.routineName}>{routine.name}</Text>
-                    {routine.description && (
-                        <Text style={styles.routineDescription}>{routine.description}</Text>
-                    )}
+                    {routine.description ? (
+                        <Text style={styles.description}>{routine.description}</Text>
+                    ) : null}
 
-                    {/* Stats Grid */}
                     <View style={styles.statsGrid}>
-                        <View style={styles.statItem}>
-                            <View style={[styles.statIconBg, { backgroundColor: routine.durationColor + '20' }]}>
-                                <Ionicons name="time" size={20} color={routine.durationColor || COLORS.primary} />
-                            </View>
-                            <Text style={styles.statValue}>{routine.calculatedDuration || routine.estimated_duration}</Text>
-                            <Text style={styles.statLabel}>minutos</Text>
-                        </View>
-
-                        <View style={styles.statItem}>
-                            <View style={[styles.statIconBg, { backgroundColor: COLORS.info + '20' }]}>
-                                <Ionicons name="fitness" size={20} color={COLORS.info} />
-                            </View>
-                            <Text style={styles.statValue}>{routine.routine_exercises.length}</Text>
-                            <Text style={styles.statLabel}>ejercicios</Text>
-                        </View>
-
-                        <View style={styles.statItem}>
-                            <View style={[styles.statIconBg, { backgroundColor: COLORS.success + '20' }]}>
-                                <Ionicons name="layers" size={20} color={COLORS.success} />
-                            </View>
-                            <Text style={styles.statValue}>{totalSets}</Text>
-                            <Text style={styles.statLabel}>series</Text>
-                        </View>
+                        <Stat
+                            icon="time"
+                            tint={routine.durationColor}
+                            value={String(routine.calculatedDuration)}
+                            label="minutos"
+                        />
+                        <Stat
+                            icon="fitness"
+                            tint={COLORS.info}
+                            value={String(routine.routine_exercises.length)}
+                            label="ejercicios"
+                        />
+                        <Stat icon="layers" tint={COLORS.success} value={String(totalSets)} label="series" />
                     </View>
 
-                    {routine.durationLabel && (
-                        <View style={[styles.durationBadge, { backgroundColor: routine.durationColor + '20' }]}>
-                            <Ionicons name="speedometer" size={14} color={routine.durationColor} />
-                            <Text style={[styles.durationBadgeText, { color: routine.durationColor }]}>
-                                Entrenamiento {routine.durationLabel}
-                            </Text>
+                    <View style={[styles.durationBadge, { backgroundColor: routine.durationColor + '20' }]}>
+                        <Ionicons name="speedometer" size={13} color={routine.durationColor} />
+                        <Text style={[styles.durationBadgeText, { color: routine.durationColor }]}>
+                            Entrenamiento {routine.durationLabel.toLowerCase()} ·{' '}
+                            {formatMinutes(routine.calculatedDuration)}
+                        </Text>
+                    </View>
+
+                    {muscleGroups.length > 0 && (
+                        <View style={styles.muscleRow}>
+                            {muscleGroups.map((group) => (
+                                <View
+                                    key={group}
+                                    style={[styles.musclePill, { backgroundColor: getMuscleColor(group) + '20' }]}
+                                >
+                                    <Text style={[styles.musclePillText, { color: getMuscleColor(group) }]}>
+                                        {group}
+                                    </Text>
+                                </View>
+                            ))}
                         </View>
                     )}
                 </LinearGradient>
 
-                {/* Exercises Section */}
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Ejercicios</Text>
-                    <Text style={styles.sectionSubtitle}>{routine.routine_exercises.length} en total</Text>
-                </View>
+                <Text style={styles.sectionTitle}>Ejercicios</Text>
 
-                <View style={styles.exercisesList}>
-                    {routine.routine_exercises.map((item, index) => {
-                        const muscleColor = getMuscleGroupColor(item.exercise.muscle_group);
-                        const restTime = formatRestTime(item.notes, item.exercise.default_rest_seconds);
-
-                        return (
-                            <View key={item.id} style={styles.exerciseCard}>
-                                {/* Order indicator with muscle group color */}
-                                <View style={[styles.exerciseOrder, { backgroundColor: muscleColor + '20' }]}>
-                                    <Text style={[styles.orderText, { color: muscleColor }]}>{index + 1}</Text>
-                                </View>
-
-                                <View style={styles.exerciseContent}>
-                                    {/* Exercise name */}
-                                    <Text style={styles.exerciseName}>{item.exercise.name}</Text>
-
-                                    {/* Muscle group badge */}
-                                    <View style={[styles.muscleGroupBadge, { backgroundColor: muscleColor + '15' }]}>
-                                        <View style={[styles.muscleGroupDot, { backgroundColor: muscleColor }]} />
-                                        <Text style={[styles.muscleGroupText, { color: muscleColor }]}>
-                                            {item.exercise.muscle_group}
-                                        </Text>
+                {routine.routine_exercises.length === 0 ? (
+                    <EmptyState
+                        icon="barbell-outline"
+                        title="Rutina vacía"
+                        message="Añade ejercicios para poder entrenarla."
+                        actionLabel="Editar rutina"
+                        onAction={() => setEditing(true)}
+                    />
+                ) : (
+                    <View style={styles.exercisesList}>
+                        {routine.routine_exercises.map((item, index) => {
+                            const color = getMuscleColor(item.exercise.muscle_group);
+                            return (
+                                <TouchableOpacity
+                                    key={item.id}
+                                    style={styles.exerciseCard}
+                                    onPress={() => router.push(`/exercise/${item.exercise_id}`)}
+                                    activeOpacity={0.75}
+                                >
+                                    <View style={[styles.exerciseOrder, { backgroundColor: color + '22' }]}>
+                                        <Text style={[styles.orderText, { color }]}>{index + 1}</Text>
                                     </View>
 
-                                    {/* Sets x Reps info */}
-                                    <View style={styles.exerciseDetails}>
-                                        <View style={styles.detailItem}>
-                                            <Ionicons name="repeat" size={14} color={COLORS.primary} />
-                                            <Text style={styles.detailText}>
-                                                {item.target_sets} Series × {item.target_reps} Reps
-                                            </Text>
+                                    <View style={styles.exerciseContent}>
+                                        <Text style={styles.exerciseName}>{item.exercise.name}</Text>
+
+                                        <View style={styles.exerciseDetails}>
+                                            <Detail icon="repeat" tint={COLORS.primary}>
+                                                {item.target_sets} × {item.target_reps}
+                                            </Detail>
+                                            <Detail icon="hourglass-outline" tint={COLORS.warning}>
+                                                {formatSeconds(item.rest_seconds)}
+                                            </Detail>
+                                            <Detail icon="speedometer-outline" tint={COLORS.textMuted}>
+                                                {item.time_per_rep_seconds}s/rep
+                                            </Detail>
                                         </View>
 
-                                        {restTime && (
-                                            <View style={styles.detailItem}>
-                                                <Ionicons name="hourglass-outline" size={14} color={COLORS.warning} />
-                                                <Text style={styles.detailText}>
-                                                    {restTime} descanso
-                                                </Text>
-                                            </View>
-                                        )}
+                                        {/* Coaching notes finally render as text instead of a JSON blob. */}
+                                        {item.notes ? <Text style={styles.exerciseNotes}>{item.notes}</Text> : null}
                                     </View>
-                                </View>
 
-                                {/* Time per rep indicator */}
-                                <View style={styles.exerciseTimeHint}>
-                                    <Text style={styles.timeHintValue}>{item.exercise.time_per_rep_seconds || 3}s</Text>
-                                    <Text style={styles.timeHintLabel}>/rep</Text>
-                                </View>
-                            </View>
-                        );
-                    })}
-                </View>
+                                    <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                )}
             </ScrollView>
-        </SafeAreaView>
+
+            {/* The whole point of opening a routine is to train it. */}
+            <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, SPACING.md) }]}>
+                <Button
+                    title="Empezar entrenamiento"
+                    variant="gradient"
+                    size="lg"
+                    fullWidth
+                    disabled={routine.routine_exercises.length === 0}
+                    onPress={() => router.navigate(`/workout?routineId=${routine.id}`)}
+                    icon={<Ionicons name="play" size={18} color="#FFF" />}
+                />
+            </View>
+
+            <CreateRoutineModal
+                visible={editing}
+                initialData={routine}
+                onClose={() => setEditing(false)}
+                onUpdate={async (routineId, name, description, exercises) => {
+                    await updateRoutine(routineId, name, description, exercises);
+                    await load();
+                }}
+            />
+        </View>
+    );
+}
+
+function Stat({
+    icon,
+    tint,
+    value,
+    label,
+}: {
+    icon: React.ComponentProps<typeof Ionicons>['name'];
+    tint: string;
+    value: string;
+    label: string;
+}) {
+    return (
+        <View style={styles.statItem}>
+            <View style={[styles.statIconBg, { backgroundColor: tint + '20' }]}>
+                <Ionicons name={icon} size={18} color={tint} />
+            </View>
+            <Text style={styles.statValue}>{value}</Text>
+            <Text style={styles.statLabel}>{label}</Text>
+        </View>
+    );
+}
+
+function Detail({
+    icon,
+    tint,
+    children,
+}: {
+    icon: React.ComponentProps<typeof Ionicons>['name'];
+    tint: string;
+    children: React.ReactNode;
+}) {
+    return (
+        <View style={styles.detailItem}>
+            <Ionicons name={icon} size={12} color={tint} />
+            <Text style={styles.detailText}>{children}</Text>
+        </View>
     );
 }
 
@@ -219,126 +284,103 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: COLORS.background,
     },
-    centerContainer: {
+    centered: {
         flex: 1,
+        alignItems: 'center',
         justifyContent: 'center',
-        alignItems: 'center',
         backgroundColor: COLORS.background,
-        gap: SPACING.md,
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: SPACING.md,
-        paddingVertical: SPACING.md,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.surfaceHighlight,
-    },
-    backButton: {
-        padding: SPACING.xs,
-    },
-    headerTitle: {
-        fontSize: FONT_SIZES.lg,
-        fontWeight: '600',
-        color: COLORS.textPrimary,
     },
     content: {
-        padding: SPACING.md,
-        paddingBottom: 120,
+        padding: SPACING.lg,
+        paddingTop: SPACING.sm,
+        paddingBottom: SPACING.xxl,
     },
-    errorText: {
-        color: COLORS.textSecondary,
-        fontSize: FONT_SIZES.lg,
-    },
-    // Routine Info Card
-    routineInfoCard: {
+    heroCard: {
         borderRadius: BORDER_RADIUS.xl,
         padding: SPACING.lg,
-        marginBottom: SPACING.xl,
         borderWidth: 1,
         borderColor: COLORS.surfaceHighlight,
+        gap: SPACING.md,
     },
-    routineName: {
-        fontSize: 28,
-        fontWeight: '800',
-        color: COLORS.textPrimary,
-        marginBottom: SPACING.xs,
-    },
-    routineDescription: {
-        fontSize: FONT_SIZES.md,
+    description: {
+        fontSize: FONT_SIZES.sm,
         color: COLORS.textSecondary,
-        lineHeight: 22,
-        marginBottom: SPACING.lg,
+        lineHeight: 20,
     },
     statsGrid: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: SPACING.md,
     },
     statItem: {
-        alignItems: 'center',
         flex: 1,
+        alignItems: 'center',
+        gap: 4,
     },
     statIconBg: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
+        width: 38,
+        height: 38,
+        borderRadius: 19,
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: SPACING.xs,
     },
     statValue: {
-        fontSize: FONT_SIZES.xl,
-        fontWeight: '700',
+        fontSize: FONT_SIZES.lg,
+        fontWeight: '800',
         color: COLORS.textPrimary,
     },
     statLabel: {
-        fontSize: FONT_SIZES.xs,
+        fontSize: 10,
         color: COLORS.textMuted,
         textTransform: 'uppercase',
+        letterSpacing: 0.6,
     },
     durationBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: SPACING.sm,
-        paddingHorizontal: SPACING.md,
-        borderRadius: BORDER_RADIUS.md,
-        gap: SPACING.xs,
+        alignSelf: 'flex-start',
+        gap: 5,
+        paddingHorizontal: SPACING.sm,
+        paddingVertical: 6,
+        borderRadius: BORDER_RADIUS.full,
     },
     durationBadgeText: {
-        fontSize: FONT_SIZES.sm,
-        fontWeight: '600',
+        fontSize: 11,
+        fontWeight: '700',
     },
-    // Section Header
-    sectionHeader: {
+    muscleRow: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'baseline',
-        marginBottom: SPACING.md,
+        flexWrap: 'wrap',
+        gap: 6,
+    },
+    musclePill: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: BORDER_RADIUS.full,
+    },
+    musclePillText: {
+        fontSize: 11,
+        fontWeight: '700',
     },
     sectionTitle: {
-        fontSize: FONT_SIZES.lg,
+        fontSize: FONT_SIZES.xs,
         fontWeight: '700',
-        color: COLORS.textPrimary,
-    },
-    sectionSubtitle: {
-        fontSize: FONT_SIZES.sm,
         color: COLORS.textMuted,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+        marginTop: SPACING.xl,
+        marginBottom: SPACING.md,
     },
-    // Exercise List
     exercisesList: {
         gap: SPACING.sm,
     },
     exerciseCard: {
         flexDirection: 'row',
-        backgroundColor: COLORS.surface,
-        borderRadius: BORDER_RADIUS.lg,
+        alignItems: 'center',
+        gap: SPACING.md,
         padding: SPACING.md,
+        backgroundColor: COLORS.surface,
+        borderRadius: BORDER_RADIUS.md,
         borderWidth: 1,
         borderColor: COLORS.surfaceHighlight,
-        alignItems: 'flex-start',
     },
     exerciseOrder: {
         width: 32,
@@ -346,100 +388,46 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         alignItems: 'center',
         justifyContent: 'center',
-        marginRight: SPACING.md,
     },
     orderText: {
-        fontWeight: '700',
-        fontSize: FONT_SIZES.md,
+        fontSize: FONT_SIZES.sm,
+        fontWeight: '800',
     },
     exerciseContent: {
         flex: 1,
-    },
-    exerciseName: {
-        fontSize: FONT_SIZES.md,
-        fontWeight: '600',
-        color: COLORS.textPrimary,
-        marginBottom: SPACING.xs,
-    },
-    muscleGroupBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        alignSelf: 'flex-start',
-        paddingHorizontal: SPACING.sm,
-        paddingVertical: 3,
-        borderRadius: BORDER_RADIUS.sm,
-        marginBottom: SPACING.sm,
         gap: 4,
     },
-    muscleGroupDot: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-    },
-    muscleGroupText: {
-        fontSize: 11,
+    exerciseName: {
+        fontSize: FONT_SIZES.sm,
         fontWeight: '600',
-        textTransform: 'uppercase',
+        color: COLORS.textPrimary,
     },
     exerciseDetails: {
-        gap: 6,
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: SPACING.sm,
     },
     detailItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
+        gap: 4,
     },
     detailText: {
-        fontSize: FONT_SIZES.sm,
+        fontSize: 11,
         color: COLORS.textSecondary,
+        fontWeight: '600',
     },
-    exerciseTimeHint: {
-        alignItems: 'center',
-        backgroundColor: COLORS.surfaceLight,
-        paddingHorizontal: SPACING.sm,
-        paddingVertical: SPACING.xs,
-        borderRadius: BORDER_RADIUS.sm,
-    },
-    timeHintValue: {
-        fontSize: FONT_SIZES.sm,
-        fontWeight: '700',
-        color: COLORS.textPrimary,
-    },
-    timeHintLabel: {
-        fontSize: 10,
+    exerciseNotes: {
+        fontSize: 11,
         color: COLORS.textMuted,
+        lineHeight: 16,
+        marginTop: 2,
     },
-    // Floating Button
-    floatingButtonContainer: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        padding: SPACING.md,
-        paddingBottom: SPACING.lg,
-        backgroundColor: COLORS.background,
+    footer: {
+        paddingHorizontal: SPACING.lg,
+        paddingTop: SPACING.md,
+        backgroundColor: COLORS.surface,
         borderTopWidth: 1,
         borderTopColor: COLORS.surfaceHighlight,
-    },
-    floatingButton: {
-        borderRadius: BORDER_RADIUS.lg,
-        overflow: 'hidden',
-        shadowColor: COLORS.primary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 6,
-    },
-    floatingButtonGradient: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: SPACING.md,
-        gap: SPACING.sm,
-    },
-    floatingButtonText: {
-        fontSize: FONT_SIZES.lg,
-        fontWeight: '700',
-        color: '#FFF',
     },
 });

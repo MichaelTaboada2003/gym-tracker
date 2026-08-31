@@ -23,11 +23,7 @@ export function GradientText({
                 </Text>
             }
         >
-            <LinearGradient
-                colors={colors as string[]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-            >
+            <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
                 <Text style={[style, { opacity: 0 }]}>{children}</Text>
             </LinearGradient>
         </MaskedView>

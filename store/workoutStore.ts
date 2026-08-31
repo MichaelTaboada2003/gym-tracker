@@ -1,5 +1,21 @@
+/**
+ * The live workout session.
+ *
+ * Two things drive the design:
+ *
+ * - **It survives the app dying.** Phones kill backgrounded apps mid-set; the
+ *   old in-memory-only store lost the whole session. State is persisted to
+ *   AsyncStorage on every change and rehydrated on launch.
+ * - **Timestamps, not tick counters.** The rest timer stores *when* it ends, so
+ *   it stays correct while the app is backgrounded and the JS timer is frozen.
+ */
+
 import { create } from 'zustand';
-import { Exercise, WorkoutLog } from '../lib/database.types';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Exercise } from '../lib/database.types';
+import { STORAGE_KEYS } from '../lib/localDatabase';
+import { parseTargetReps } from '../lib/utils';
 
 export interface SetData {
     id: string;
@@ -9,6 +25,7 @@ export interface SetData {
     rpe: number | null;
     isWarmup: boolean;
     isCompleted: boolean;
+    /** What this set number looked like in the previous session, for the "anterior" column. */
     previousWeight?: number;
     previousReps?: number;
 }
@@ -22,219 +39,334 @@ export interface PreviousSetData {
 export interface ExerciseInProgress {
     exercise: Exercise;
     sets: SetData[];
+    /** Heaviest work set ever logged for this exercise. */
     previousBest: { weight: number; reps: number } | null;
     previousSets: PreviousSetData[];
+    targetSets: number;
+    targetReps: string;
+    restSeconds: number;
+    notes: string | null;
+}
+
+export interface ExerciseOverrides {
     targetSets?: number;
     targetReps?: string;
     restSeconds?: number;
     notes?: string | null;
 }
 
+/** A rest countdown, described by its endpoints so elapsed time is always real time. */
+export interface RestTimerState {
+    exerciseIndex: number;
+    /** Epoch ms when the countdown should hit zero. */
+    endsAt: number;
+    /** Full length in seconds, including any ±15s adjustments. */
+    durationSeconds: number;
+}
+
 interface WorkoutState {
-    // Session state
     isActive: boolean;
-    sessionId: string | null;
     routineId: string | null;
     routineName: string | null;
-    startedAt: Date | null;
-
-    // Exercises in progress
+    /** Epoch ms. Stored as a number so it round-trips through JSON. */
+    startedAt: number | null;
     exercises: ExerciseInProgress[];
-    currentExerciseIndex: number;
+    restTimer: RestTimerState | null;
+    /** False until the persisted session has been read back from storage. */
+    hydrated: boolean;
 
-    // Actions
-    startWorkout: (routineId?: string, routineName?: string) => void;
+    startWorkout: (routineId?: string | null, routineName?: string | null) => void;
     endWorkout: () => void;
 
     addExercise: (
         exercise: Exercise,
         previousBest?: { weight: number; reps: number } | null,
-        overrides?: { targetSets?: number; targetReps?: string; restSeconds?: number; notes?: string | null },
+        overrides?: ExerciseOverrides,
         previousSets?: PreviousSetData[]
     ) => void;
+    addExercises: (
+        entries: {
+            exercise: Exercise;
+            previousBest?: { weight: number; reps: number } | null;
+            overrides?: ExerciseOverrides;
+            previousSets?: PreviousSetData[];
+        }[]
+    ) => void;
     removeExercise: (index: number) => void;
-    setCurrentExercise: (index: number) => void;
+    moveExercise: (from: number, to: number) => void;
 
     addSet: (exerciseIndex: number) => void;
     updateSet: (exerciseIndex: number, setIndex: number, data: Partial<SetData>) => void;
     removeSet: (exerciseIndex: number, setIndex: number) => void;
-    completeSet: (exerciseIndex: number, setIndex: number) => void;
+    /** Flips completion both ways — mis-taps used to be unrecoverable. */
+    toggleSet: (exerciseIndex: number, setIndex: number) => void;
 
-    // Helpers
+    startRest: (exerciseIndex: number, seconds: number) => void;
+    adjustRest: (deltaSeconds: number) => void;
+    stopRest: () => void;
+
     getCompletedSets: () => number;
     getTotalVolume: () => number;
+    getTotalReps: () => number;
+    getElapsedMinutes: () => number;
+    hasUnfinishedSets: () => boolean;
 }
 
-const generateId = () => Math.random().toString(36).substring(2, 9);
+const generateId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
 
-export const useWorkoutStore = create<WorkoutState>((set, get) => ({
-    // Initial state
+/** Renumbers sets after an insert/removal so `setNumber` always matches position. */
+const renumber = (sets: SetData[]): SetData[] => sets.map((set, i) => ({ ...set, setNumber: i + 1 }));
+
+function buildExercise(
+    exercise: Exercise,
+    previousBest: { weight: number; reps: number } | null | undefined,
+    overrides: ExerciseOverrides | undefined,
+    previousSets: PreviousSetData[] | undefined
+): ExerciseInProgress {
+    const targetSets = Math.max(1, overrides?.targetSets ?? 3);
+    const targetReps = overrides?.targetReps ?? '';
+    const restSeconds = overrides?.restSeconds ?? exercise.default_rest_seconds ?? 90;
+    const prevSets = previousSets ?? [];
+    const initialReps = parseTargetReps(targetReps, previousBest?.reps || 10);
+
+    return {
+        exercise,
+        previousBest: previousBest ?? null,
+        previousSets: prevSets,
+        targetSets,
+        targetReps,
+        restSeconds,
+        notes: overrides?.notes ?? null,
+        sets: Array.from({ length: targetSets }, (_, i) => {
+            const prev = prevSets.find((ps) => ps.setNumber === i + 1);
+            return {
+                id: generateId(),
+                setNumber: i + 1,
+                // Pre-fill with what was actually done last time: the fastest path
+                // to logging a set is confirming the number that is already there.
+                weight: prev?.weight ?? previousBest?.weight ?? 0,
+                reps: prev?.reps ?? initialReps,
+                rpe: null,
+                isWarmup: false,
+                isCompleted: false,
+                previousWeight: prev?.weight,
+                previousReps: prev?.reps,
+            };
+        }),
+    };
+}
+
+const EMPTY_SESSION = {
     isActive: false,
-    sessionId: null,
     routineId: null,
     routineName: null,
     startedAt: null,
     exercises: [],
-    currentExerciseIndex: 0,
+    restTimer: null,
+} as const;
 
-    // Start a new workout
-    startWorkout: (routineId, routineName) => {
-        set({
-            isActive: true,
-            sessionId: generateId(),
-            routineId: routineId || null,
-            routineName: routineName || null,
-            startedAt: new Date(),
-            exercises: [],
-            currentExerciseIndex: 0,
-        });
-    },
+export const useWorkoutStore = create<WorkoutState>()(
+    persist(
+        (set, get) => ({
+            ...EMPTY_SESSION,
+            exercises: [] as ExerciseInProgress[],
+            restTimer: null as RestTimerState | null,
+            hydrated: false,
 
-    // End workout and reset state
-    endWorkout: () => {
-        set({
-            isActive: false,
-            sessionId: null,
-            routineId: null,
-            routineName: null,
-            startedAt: null,
-            exercises: [],
-            currentExerciseIndex: 0,
-        });
-    },
+            startWorkout: (routineId, routineName) =>
+                set({
+                    ...EMPTY_SESSION,
+                    exercises: [],
+                    restTimer: null,
+                    isActive: true,
+                    routineId: routineId ?? null,
+                    routineName: routineName ?? null,
+                    startedAt: Date.now(),
+                }),
 
-    // Add an exercise to the workout
-    addExercise: (
-        exercise: Exercise,
-        previousBest?: { weight: number; reps: number } | null,
-        overrides?: { targetSets?: number; targetReps?: string; restSeconds?: number; notes?: string | null },
-        previousSets?: PreviousSetData[]
-    ) => {
-        const targetSets = overrides?.targetSets || 3;
-        const targetReps = overrides?.targetReps; // String "6-8"
-        // Parse numeric rep target for initial value if possible (e.g. "8-10" -> 8)
-        const initialReps = targetReps ? parseInt(targetReps) || 10 : (previousBest?.reps || 10);
+            endWorkout: () => set({ ...EMPTY_SESSION, exercises: [], restTimer: null }),
 
-        // Get rest seconds: from overrides, from exercise default, or fallback to 90
-        const restSeconds = overrides?.restSeconds || (exercise as any).default_rest_seconds || 90;
+            addExercise: (exercise, previousBest, overrides, previousSets) =>
+                set((state) => ({
+                    exercises: [...state.exercises, buildExercise(exercise, previousBest, overrides, previousSets)],
+                })),
 
-        const prevSets = previousSets || [];
+            // One update for a whole routine, instead of N store writes and N re-renders.
+            addExercises: (entries) =>
+                set((state) => ({
+                    exercises: [
+                        ...state.exercises,
+                        ...entries.map((entry) =>
+                            buildExercise(entry.exercise, entry.previousBest, entry.overrides, entry.previousSets)
+                        ),
+                    ],
+                })),
 
-        const newExercise: ExerciseInProgress = {
-            exercise,
-            previousBest: previousBest || null,
-            previousSets: prevSets,
-            targetSets,
-            targetReps,
-            restSeconds,
-            notes: overrides?.notes,
-            sets: Array(targetSets).fill(0).map((_, i) => {
-                // Get previous data for this specific set number
-                const prevSet = prevSets.find(ps => ps.setNumber === i + 1);
-                return {
-                    id: generateId(),
-                    setNumber: i + 1,
-                    weight: prevSet?.weight || previousBest?.weight || 0,
-                    reps: prevSet?.reps || initialReps,
-                    rpe: null,
-                    isWarmup: false,
-                    isCompleted: false,
-                    previousWeight: prevSet?.weight,
-                    previousReps: prevSet?.reps,
-                };
+            removeExercise: (index) =>
+                set((state) => ({
+                    exercises: state.exercises.filter((_, i) => i !== index),
+                    // A timer belonging to a removed card would otherwise point at the wrong exercise.
+                    restTimer:
+                        state.restTimer == null
+                            ? null
+                            : state.restTimer.exerciseIndex === index
+                              ? null
+                              : state.restTimer.exerciseIndex > index
+                                ? { ...state.restTimer, exerciseIndex: state.restTimer.exerciseIndex - 1 }
+                                : state.restTimer,
+                })),
+
+            moveExercise: (from, to) =>
+                set((state) => {
+                    if (from === to || from < 0 || to < 0) return state;
+                    if (from >= state.exercises.length || to >= state.exercises.length) return state;
+                    const exercises = [...state.exercises];
+                    const [moved] = exercises.splice(from, 1);
+                    exercises.splice(to, 0, moved);
+                    return { exercises, restTimer: null };
+                }),
+
+            addSet: (exerciseIndex) =>
+                set((state) => {
+                    const exercises = [...state.exercises];
+                    const target = exercises[exerciseIndex];
+                    if (!target) return state;
+
+                    const last = target.sets[target.sets.length - 1];
+                    exercises[exerciseIndex] = {
+                        ...target,
+                        sets: [
+                            ...target.sets,
+                            {
+                                id: generateId(),
+                                setNumber: target.sets.length + 1,
+                                weight: last?.weight ?? target.previousBest?.weight ?? 0,
+                                reps: last?.reps ?? parseTargetReps(target.targetReps),
+                                rpe: null,
+                                isWarmup: false,
+                                isCompleted: false,
+                            },
+                        ],
+                    };
+                    return { exercises };
+                }),
+
+            updateSet: (exerciseIndex, setIndex, data) =>
+                set((state) => {
+                    const target = state.exercises[exerciseIndex];
+                    if (!target?.sets[setIndex]) return state;
+
+                    const exercises = [...state.exercises];
+                    const sets = [...target.sets];
+                    sets[setIndex] = { ...sets[setIndex], ...data };
+                    exercises[exerciseIndex] = { ...target, sets };
+                    return { exercises };
+                }),
+
+            removeSet: (exerciseIndex, setIndex) =>
+                set((state) => {
+                    const target = state.exercises[exerciseIndex];
+                    if (!target) return state;
+
+                    const exercises = [...state.exercises];
+                    exercises[exerciseIndex] = {
+                        ...target,
+                        sets: renumber(target.sets.filter((_, i) => i !== setIndex)),
+                    };
+                    return { exercises };
+                }),
+
+            toggleSet: (exerciseIndex, setIndex) =>
+                set((state) => {
+                    const target = state.exercises[exerciseIndex];
+                    const current = target?.sets[setIndex];
+                    if (!current) return state;
+
+                    const exercises = [...state.exercises];
+                    const sets = [...target.sets];
+                    sets[setIndex] = { ...current, isCompleted: !current.isCompleted };
+                    exercises[exerciseIndex] = { ...target, sets };
+                    return { exercises };
+                }),
+
+            startRest: (exerciseIndex, seconds) =>
+                set({
+                    restTimer: {
+                        exerciseIndex,
+                        endsAt: Date.now() + seconds * 1000,
+                        durationSeconds: seconds,
+                    },
+                }),
+
+            adjustRest: (deltaSeconds) =>
+                set((state) => {
+                    if (!state.restTimer) return state;
+                    const duration = Math.max(5, state.restTimer.durationSeconds + deltaSeconds);
+                    return {
+                        restTimer: {
+                            ...state.restTimer,
+                            endsAt: Math.max(Date.now(), state.restTimer.endsAt + deltaSeconds * 1000),
+                            durationSeconds: duration,
+                        },
+                    };
+                }),
+
+            stopRest: () => set({ restTimer: null }),
+
+            getCompletedSets: () =>
+                get().exercises.reduce(
+                    (total, ex) => total + ex.sets.filter((s) => s.isCompleted && !s.isWarmup).length,
+                    0
+                ),
+
+            getTotalVolume: () =>
+                get().exercises.reduce(
+                    (total, ex) =>
+                        total +
+                        ex.sets
+                            .filter((s) => s.isCompleted && !s.isWarmup)
+                            .reduce((sum, s) => sum + s.weight * s.reps, 0),
+                    0
+                ),
+
+            getTotalReps: () =>
+                get().exercises.reduce(
+                    (total, ex) =>
+                        total +
+                        ex.sets.filter((s) => s.isCompleted && !s.isWarmup).reduce((sum, s) => sum + s.reps, 0),
+                    0
+                ),
+
+            getElapsedMinutes: () => {
+                const { startedAt } = get();
+                if (!startedAt) return 0;
+                return Math.max(0, Math.round((Date.now() - startedAt) / 60_000));
+            },
+
+            hasUnfinishedSets: () =>
+                get().exercises.some((ex) => ex.sets.some((s) => !s.isCompleted && !s.isWarmup)),
+        }),
+        {
+            name: STORAGE_KEYS.ACTIVE_WORKOUT,
+            storage: createJSONStorage(() => AsyncStorage),
+            // `hydrated` is runtime-only; the rest is the resumable session.
+            partialize: ({ isActive, routineId, routineName, startedAt, exercises, restTimer }) => ({
+                isActive,
+                routineId,
+                routineName,
+                startedAt,
+                exercises,
+                restTimer,
             }),
-        };
+        }
+    )
+);
 
-        set((state) => ({
-            exercises: [...state.exercises, newExercise],
-        }));
-    },
-
-    // Remove an exercise
-    removeExercise: (index) => {
-        set((state) => ({
-            exercises: state.exercises.filter((_, i) => i !== index),
-            currentExerciseIndex: Math.min(state.currentExerciseIndex, state.exercises.length - 2),
-        }));
-    },
-
-    // Set the current exercise index
-    setCurrentExercise: (index) => {
-        set({ currentExerciseIndex: index });
-    },
-
-    // Add a new set to an exercise
-    addSet: (exerciseIndex) => {
-        set((state) => {
-            const exercises = [...state.exercises];
-            const exercise = exercises[exerciseIndex];
-            const lastSet = exercise.sets[exercise.sets.length - 1];
-
-            exercise.sets.push({
-                id: generateId(),
-                setNumber: exercise.sets.length + 1,
-                weight: lastSet?.weight || 0,
-                reps: lastSet?.reps || 10,
-                rpe: null,
-                isWarmup: false,
-                isCompleted: false,
-            });
-
-            return { exercises };
-        });
-    },
-
-    // Update a set's data
-    updateSet: (exerciseIndex, setIndex, data) => {
-        set((state) => {
-            const exercises = [...state.exercises];
-            exercises[exerciseIndex].sets[setIndex] = {
-                ...exercises[exerciseIndex].sets[setIndex],
-                ...data,
-            };
-            return { exercises };
-        });
-    },
-
-    // Remove a set
-    removeSet: (exerciseIndex, setIndex) => {
-        set((state) => {
-            const exercises = [...state.exercises];
-            exercises[exerciseIndex].sets = exercises[exerciseIndex].sets
-                .filter((_, i) => i !== setIndex)
-                .map((s, i) => ({ ...s, setNumber: i + 1 }));
-            return { exercises };
-        });
-    },
-
-    // Mark a set as completed
-    completeSet: (exerciseIndex, setIndex) => {
-        set((state) => {
-            const exercises = [...state.exercises];
-            exercises[exerciseIndex].sets[setIndex].isCompleted = true;
-            return { exercises };
-        });
-    },
-
-    // Get total completed sets
-    getCompletedSets: () => {
-        const { exercises } = get();
-        return exercises.reduce(
-            (total, ex) => total + ex.sets.filter((s) => s.isCompleted && !s.isWarmup).length,
-            0
-        );
-    },
-
-    // Get total volume (weight × reps)
-    getTotalVolume: () => {
-        const { exercises } = get();
-        return exercises.reduce(
-            (total, ex) =>
-                total +
-                ex.sets
-                    .filter((s) => s.isCompleted && !s.isWarmup)
-                    .reduce((sum, s) => sum + s.weight * s.reps, 0),
-            0
-        );
-    },
-}));
+// Screens must not render "no active workout" while the saved session is still
+// being read back, so expose an explicit hydration flag.
+useWorkoutStore.persist.onFinishHydration(() => {
+    useWorkoutStore.setState({ hydrated: true });
+});
+if (useWorkoutStore.persist.hasHydrated()) {
+    useWorkoutStore.setState({ hydrated: true });
+}

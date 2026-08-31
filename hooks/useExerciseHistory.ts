@@ -1,119 +1,157 @@
-import { useState, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { storage } from '../lib/localDatabase';
+import { Exercise } from '../lib/database.types';
+import { calculate1RM } from '../lib/utils';
 
-interface ExerciseHistoryEntry {
-    exercise_id: string;
-    exercise_name: string;
-    session_date: string;
-    set_number: number;
-    weight_kg: number;
+/** One set as it was performed, with the session date attached. */
+export interface HistorySet {
+    logId: string;
+    sessionId: string;
+    date: string;
+    setNumber: number;
+    weight: number;
     reps: number;
     rpe: number | null;
     volume: number;
-    estimated_1rm: number;
+    estimated1RM: number;
 }
 
-export function useExerciseHistory(exerciseId: string) {
-    const [history, setHistory] = useState<ExerciseHistoryEntry[]>([]);
-    const [loading, setLoading] = useState(false);
+/** All sets of one exercise on one day. */
+export interface HistorySession {
+    sessionId: string;
+    date: string;
+    sets: HistorySet[];
+    volume: number;
+    topSet: HistorySet | null;
+    best1RM: number;
+}
+
+export interface ExerciseHistorySummary {
+    totalSessions: number;
+    totalSets: number;
+    totalVolume: number;
+    /** Heaviest single work set ever. */
+    heaviest: HistorySet | null;
+    /** Best estimated 1RM ever. */
+    best1RM: HistorySet | null;
+    /** Best 1RM per day, oldest first — ready for a progress chart. */
+    progression: { date: string; value: number }[];
+}
+
+const EMPTY_SUMMARY: ExerciseHistorySummary = {
+    totalSessions: 0,
+    totalSets: 0,
+    totalVolume: 0,
+    heaviest: null,
+    best1RM: null,
+    progression: [],
+};
+
+/**
+ * Full training history for a single exercise, grouped by session.
+ *
+ * Work sets only — warm-ups would distort every record and volume figure.
+ */
+export function useExerciseHistory(exerciseId: string | undefined) {
+    const [exercise, setExercise] = useState<Exercise | null>(null);
+    const [sessions, setSessions] = useState<HistorySession[]>([]);
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Calculate estimated 1RM using Brzycki formula
-    const calculateEstimated1RM = (weight: number, reps: number): number => {
-        if (reps <= 0 || weight <= 0) return 0;
-        if (reps === 1) return weight;
-        return Math.round(weight * (36 / (37 - reps)));
-    };
-
-    // Fetch history for an exercise from AsyncStorage
-    const fetchHistory = useCallback(async (limit = 30) => {
-        if (!exerciseId) return;
+    const fetchHistory = useCallback(async () => {
+        if (!exerciseId) {
+            setLoading(false);
+            return;
+        }
 
         try {
-            setLoading(true);
+            setError(null);
+            const [exerciseRow, logs, workoutSessions] = await Promise.all([
+                storage.exercises.getById(exerciseId),
+                storage.workoutLogs.getAll(),
+                storage.workoutSessions.getAll(),
+            ]);
 
-            // Get all workout logs
-            const allLogs = await storage.workoutLogs.getAll() as any[];
-            const allSessions = await storage.workoutSessions.getAll() as any[];
-            const allExercises = await storage.exercises.getAll() as any[];
+            setExercise(exerciseRow);
 
-            // Filter logs for this exercise
-            const exerciseLogs = allLogs.filter(log => log.exercise_id === exerciseId);
+            const dateBySession = new Map(workoutSessions.map((s) => [s.id, s.session_date]));
+            const grouped = new Map<string, HistorySet[]>();
 
-            // Build history entries with session date and exercise name
-            const exerciseInfo = allExercises.find(e => e.id === exerciseId);
-            const exerciseName = exerciseInfo?.name || 'Unknown';
+            for (const log of logs) {
+                if (log.exercise_id !== exerciseId || log.is_warmup) continue;
+                const date = dateBySession.get(log.session_id);
+                if (!date) continue;
 
-            const historyEntries: ExerciseHistoryEntry[] = exerciseLogs
-                .map(log => {
-                    const session = allSessions.find(s => s.id === log.session_id);
-                    const volume = log.weight_kg * log.reps;
-                    const estimated1rm = calculateEstimated1RM(log.weight_kg, log.reps);
+                const weight = Number(log.weight_kg) || 0;
+                const entry: HistorySet = {
+                    logId: log.id,
+                    sessionId: log.session_id,
+                    date,
+                    setNumber: log.set_number,
+                    weight,
+                    reps: log.reps || 0,
+                    rpe: log.rpe,
+                    volume: weight * (log.reps || 0),
+                    estimated1RM: calculate1RM(weight, log.reps || 0),
+                };
 
+                const bucket = grouped.get(log.session_id);
+                if (bucket) bucket.push(entry);
+                else grouped.set(log.session_id, [entry]);
+            }
+
+            const result: HistorySession[] = Array.from(grouped.entries())
+                .map(([sessionId, sets]) => {
+                    const ordered = sets.sort((a, b) => a.setNumber - b.setNumber);
                     return {
-                        exercise_id: log.exercise_id,
-                        exercise_name: exerciseName,
-                        session_date: session?.session_date || '',
-                        set_number: log.set_number,
-                        weight_kg: log.weight_kg,
-                        reps: log.reps,
-                        rpe: log.rpe,
-                        volume,
-                        estimated_1rm: estimated1rm,
+                        sessionId,
+                        date: ordered[0].date,
+                        sets: ordered,
+                        volume: ordered.reduce((sum, s) => sum + s.volume, 0),
+                        topSet: ordered.reduce<HistorySet | null>(
+                            (top, s) => (!top || s.estimated1RM > top.estimated1RM ? s : top),
+                            null
+                        ),
+                        best1RM: ordered.reduce((max, s) => Math.max(max, s.estimated1RM), 0),
                     };
                 })
-                .filter(entry => entry.session_date) // Remove entries without valid session
-                .sort((a, b) => new Date(b.session_date).getTime() - new Date(a.session_date).getTime())
-                .slice(0, limit);
+                // Newest first: the list reads as a timeline going back in time.
+                .sort((a, b) => b.date.localeCompare(a.date));
 
-            setHistory(historyEntries);
+            setSessions(result);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Error loading history');
+            console.error('[exercise-history] load failed:', err);
+            setError('No se pudo cargar el historial');
         } finally {
             setLoading(false);
         }
     }, [exerciseId]);
 
-    // Get the previous best (heaviest weight for a target rep range)
-    const getPreviousBest = useCallback((targetReps = 10) => {
-        const relevantSets = history.filter(
-            (h) => h.reps >= targetReps - 2 && h.reps <= targetReps + 2
-        );
+    const summary = useMemo<ExerciseHistorySummary>(() => {
+        if (sessions.length === 0) return EMPTY_SUMMARY;
 
-        if (relevantSets.length === 0) return null;
+        const allSets = sessions.flatMap((s) => s.sets);
+        return {
+            totalSessions: sessions.length,
+            totalSets: allSets.length,
+            totalVolume: allSets.reduce((sum, s) => sum + s.volume, 0),
+            heaviest: allSets.reduce<HistorySet | null>(
+                (top, s) => (!top || s.weight > top.weight ? s : top),
+                null
+            ),
+            best1RM: allSets.reduce<HistorySet | null>(
+                (top, s) => (!top || s.estimated1RM > top.estimated1RM ? s : top),
+                null
+            ),
+            progression: [...sessions]
+                .sort((a, b) => a.date.localeCompare(b.date))
+                .map((s) => ({ date: s.date, value: s.best1RM })),
+        };
+    }, [sessions]);
 
-        return relevantSets.reduce((best, current) =>
-            current.weight_kg > best.weight_kg ? current : best
-        );
-    }, [history]);
+    useEffect(() => {
+        void fetchHistory();
+    }, [fetchHistory]);
 
-    // Get max estimated 1RM
-    const getMax1RM = useCallback(() => {
-        if (history.length === 0) return null;
-        return Math.max(...history.map((h) => h.estimated_1rm));
-    }, [history]);
-
-    // Get volume over time (for charts)
-    const getVolumeByDate = useCallback(() => {
-        const volumeByDate: Record<string, number> = {};
-
-        history.forEach((h) => {
-            const date = h.session_date;
-            volumeByDate[date] = (volumeByDate[date] || 0) + h.volume;
-        });
-
-        return Object.entries(volumeByDate)
-            .map(([date, volume]) => ({ date, volume }))
-            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    }, [history]);
-
-    return {
-        history,
-        loading,
-        error,
-        fetchHistory,
-        getPreviousBest,
-        getMax1RM,
-        getVolumeByDate,
-    };
+    return { exercise, sessions, summary, loading, error, fetchHistory };
 }

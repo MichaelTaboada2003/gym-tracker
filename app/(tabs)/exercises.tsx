@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     View,
     Text,
@@ -7,422 +7,498 @@ import {
     TextInput,
     TouchableOpacity,
     Modal,
+    FlatList,
     RefreshControl,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
-import { Card } from '../../components/ui/Card';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, getMuscleColor, HIT_SIZE } from '../../constants/colors';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { EmptyState } from '../../components/ui/EmptyState';
 import { Button } from '../../components/ui/Button';
-import { IconButton } from '../../components/ui/IconButton';
-import { GradientText } from '../../components/ui/GradientText';
-import { useExercises } from '../../hooks/useExercises';
+import { useExercises, ExerciseDraft } from '../../hooks/useExercises';
+import { useRefreshOnFocus } from '../../hooks/useRefreshOnFocus';
 import { Exercise } from '../../lib/database.types';
+import { formatSeconds } from '../../lib/utils';
 
-const MUSCLE_GROUPS = [
-    'Pecho', 'Espalda', 'Hombros', 'Bíceps', 'Tríceps',
-    'Piernas', 'Glúteos', 'Core', 'Cardio'
-];
+const MUSCLE_GROUPS = ['Pecho', 'Espalda', 'Hombros', 'Bíceps', 'Tríceps', 'Piernas', 'Glúteos', 'Core', 'Cardio'];
+const EQUIPMENT_OPTIONS = ['Barra', 'Mancuernas', 'Máquina', 'Polea', 'Peso corporal', 'Kettlebell', 'Bandas'];
+const REST_OPTIONS = [45, 60, 75, 90, 105, 120, 150, 180];
+const TEMPO_OPTIONS = [2, 3, 4, 5];
 
-const EQUIPMENT_OPTIONS = [
-    'Barra', 'Mancuernas', 'Máquina', 'Cable', 'Peso corporal', 'Otro'
-];
+interface FormState {
+    name: string;
+    muscleGroup: string;
+    equipment: string;
+    notes: string;
+    restSeconds: number;
+    tempo: number;
+}
+
+const EMPTY_FORM: FormState = {
+    name: '',
+    muscleGroup: '',
+    equipment: '',
+    notes: '',
+    restSeconds: 90,
+    tempo: 3,
+};
 
 export default function ExercisesScreen() {
-    const { exercises, loading, createExercise, updateExercise, deleteExercise, fetchExercises } = useExercises();
-    const [isModalVisible, setIsModalVisible] = useState(false);
-    const [searchQuery, setSearchQuery] = useState('');
+    const router = useRouter();
+    const {
+        exercises,
+        loading,
+        fetchExercises,
+        createExercise,
+        updateExercise,
+        deleteExercise,
+        countRoutineUsages,
+    } = useExercises();
+
+    useRefreshOnFocus(fetchExercises);
+
+    const [query, setQuery] = useState('');
     const [selectedMuscle, setSelectedMuscle] = useState<string | null>(null);
-
-    // Edit mode
-    const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
-
-    // Form state
-    const [name, setName] = useState('');
-    const [muscleGroup, setMuscleGroup] = useState('');
-    const [equipment, setEquipment] = useState('');
-    const [notes, setNotes] = useState('');
-
-    const filteredExercises = exercises.filter(ex => {
-        const matchesSearch = ex.name.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesMuscle = !selectedMuscle || ex.muscle_group === selectedMuscle;
-        return matchesSearch && matchesMuscle;
+    const [editor, setEditor] = useState<{ open: boolean; editing: Exercise | null }>({
+        open: false,
+        editing: null,
     });
 
-    const handleCreateExercise = async () => {
-        if (!name.trim() || !muscleGroup) {
-            if (typeof window !== 'undefined') {
-                window.alert('Nombre y grupo muscular son requeridos');
-            }
-            return;
-        }
+    const filtered = useMemo(() => {
+        const needle = query.trim().toLowerCase();
+        return exercises.filter((ex) => {
+            const matchesSearch =
+                !needle ||
+                ex.name.toLowerCase().includes(needle) ||
+                ex.equipment.toLowerCase().includes(needle);
+            return matchesSearch && (!selectedMuscle || ex.muscle_group === selectedMuscle);
+        });
+    }, [exercises, query, selectedMuscle]);
 
-        try {
-            await createExercise({
-                name: name.trim(),
-                muscle_group: muscleGroup,
-                equipment: equipment || undefined,
-                notes: notes || undefined,
-            } as any);
-            resetForm();
-            setIsModalVisible(false);
-        } catch (error) {
-            console.error('Error creating exercise:', error);
-        }
-    };
+    /** How many exercises exist per muscle group, for the filter chip counts. */
+    const countsByMuscle = useMemo(() => {
+        const counts = new Map<string, number>();
+        exercises.forEach((ex) => counts.set(ex.muscle_group, (counts.get(ex.muscle_group) ?? 0) + 1));
+        return counts;
+    }, [exercises]);
 
-    const handleUpdateExercise = async () => {
-        if (!editingExercise) return;
-        if (!name.trim() || !muscleGroup) {
-            if (typeof window !== 'undefined') {
-                window.alert('Nombre y grupo muscular son requeridos');
-            }
-            return;
-        }
+    /**
+     * Confirms with `Alert`, not `window.confirm`.
+     *
+     * React Native defines a `window` global but no `confirm` on it, so the old
+     * `if (typeof window !== 'undefined') window.confirm(...)` threw a TypeError
+     * on device — deleting an exercise crashed the screen every time.
+     */
+    const confirmDelete = async (exercise: Exercise) => {
+        const usages = await countRoutineUsages(exercise.id);
+        const warning =
+            usages > 0
+                ? `Se quitará de ${usages} ${usages === 1 ? 'rutina' : 'rutinas'}. `
+                : '';
 
-        try {
-            await updateExercise(editingExercise.id, {
-                name: name.trim(),
-                muscle_group: muscleGroup,
-                equipment: equipment || null,
-                notes: notes || null,
-            });
-            resetForm();
-            setIsModalVisible(false);
-            setEditingExercise(null);
-        } catch (error) {
-            console.error('Error updating exercise:', error);
-        }
-    };
-
-    const handleDeleteExercise = async (exercise: Exercise) => {
-        if (typeof window !== 'undefined') {
-            const confirmed = window.confirm(`¿Eliminar "${exercise.name}"?`);
-            if (!confirmed) return;
-        }
-
-        try {
-            await deleteExercise(exercise.id);
-        } catch (error) {
-            console.error('Error deleting exercise:', error);
-        }
-    };
-
-    const openEditModal = (exercise: Exercise) => {
-        setEditingExercise(exercise);
-        setName(exercise.name);
-        setMuscleGroup(exercise.muscle_group);
-        setEquipment(exercise.equipment || '');
-        setNotes(exercise.notes || '');
-        setIsModalVisible(true);
-    };
-
-    const openCreateModal = () => {
-        resetForm();
-        setEditingExercise(null);
-        setIsModalVisible(true);
-    };
-
-    const resetForm = () => {
-        setName('');
-        setMuscleGroup('');
-        setEquipment('');
-        setNotes('');
-    };
-
-    const getMuscleColor = (muscle: string) => {
-        const colors: Record<string, string> = {
-            'Pecho': COLORS.chest,
-            'Espalda': COLORS.back,
-            'Hombros': COLORS.shoulders,
-            'Bíceps': COLORS.arms,
-            'Tríceps': COLORS.arms,
-            'Piernas': COLORS.legs,
-            'Glúteos': COLORS.legs,
-            'Core': COLORS.core,
-            'Cardio': COLORS.cardio,
-        };
-        return colors[muscle] || COLORS.primary;
+        Alert.alert(
+            'Eliminar ejercicio',
+            `${warning}El historial de series que ya registraste se conserva.`,
+            [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                    text: 'Eliminar',
+                    style: 'destructive',
+                    onPress: () => deleteExercise(exercise.id),
+                },
+            ]
+        );
     };
 
     return (
         <View style={styles.container}>
-            {/* Header with Gradient */}
-            <LinearGradient
-                colors={[COLORS.primary + '15', 'transparent']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.header}
-            >
-                <View style={styles.headerContent}>
-                    <View style={styles.headerTextContainer}>
-                        <Text style={styles.headerSubtitle}>EXPLORA TUS</Text>
-                        <Text style={styles.headerTitle}>Ejercicios</Text>
-                    </View>
-                    <View style={styles.headerButtons}>
-                        <TouchableOpacity
-                            style={styles.headerBtnPrimary}
-                            onPress={openCreateModal}
-                        >
-                            <LinearGradient
-                                colors={COLORS.gradients.primary}
-                                style={styles.headerBtnGradient}
-                            >
-                                <Ionicons name="add" size={22} color="#FFF" />
-                            </LinearGradient>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </LinearGradient>
+            <ScreenHeader
+                eyebrow="Tu catálogo"
+                title="Ejercicios"
+                actions={[
+                    {
+                        icon: 'add',
+                        variant: 'primary',
+                        accessibilityLabel: 'Crear ejercicio',
+                        onPress: () => setEditor({ open: true, editing: null }),
+                    },
+                ]}
+            />
 
-            {/* Search */}
             <View style={styles.searchContainer}>
-                <Ionicons name="search" size={20} color={COLORS.textMuted} style={styles.searchIcon} />
+                <Ionicons name="search" size={18} color={COLORS.textMuted} />
                 <TextInput
                     style={styles.searchInput}
-                    placeholder="Buscar ejercicio..."
+                    placeholder="Buscar ejercicio o material…"
                     placeholderTextColor={COLORS.textMuted}
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
+                    value={query}
+                    onChangeText={setQuery}
+                    autoCorrect={false}
+                    returnKeyType="search"
                 />
+                {query.length > 0 && (
+                    <TouchableOpacity onPress={() => setQuery('')} accessibilityLabel="Limpiar búsqueda">
+                        <Ionicons name="close-circle" size={18} color={COLORS.textMuted} />
+                    </TouchableOpacity>
+                )}
             </View>
 
-            {/* Muscle Filter */}
-            <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.filterContainer}
-                contentContainerStyle={styles.filterContent}
-            >
-                <TouchableOpacity
-                    onPress={() => setSelectedMuscle(null)}
-                    style={styles.filterChipWrapper}
+            <View style={styles.filterWrapper}>
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.filterContent}
                 >
-                    {!selectedMuscle ? (
-                        <LinearGradient
-                            colors={['#8B5CF6', '#6D28D9']}
-                            style={styles.filterChipActive}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                        >
-                            <Text style={styles.filterTextActive}>Todos</Text>
-                        </LinearGradient>
-                    ) : (
-                        <View style={styles.filterChip}>
-                            <Text style={styles.filterText}>Todos</Text>
-                        </View>
-                    )}
-                </TouchableOpacity>
-                {MUSCLE_GROUPS.map(muscle => (
-                    <TouchableOpacity
-                        key={muscle}
-                        onPress={() => setSelectedMuscle(selectedMuscle === muscle ? null : muscle)}
-                        style={styles.filterChipWrapper}
-                    >
-                        {selectedMuscle === muscle ? (
-                            <LinearGradient
-                                colors={['#8B5CF6', '#6D28D9']}
-                                style={styles.filterChipActive}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                            >
-                                <Text style={styles.filterTextActive}>{muscle}</Text>
-                            </LinearGradient>
-                        ) : (
-                            <View style={styles.filterChip}>
-                                <Text style={styles.filterText}>{muscle}</Text>
-                            </View>
-                        )}
-                    </TouchableOpacity>
-                ))}
-            </ScrollView>
+                    <FilterChip
+                        label="Todos"
+                        count={exercises.length}
+                        active={!selectedMuscle}
+                        color={COLORS.primary}
+                        onPress={() => setSelectedMuscle(null)}
+                    />
+                    {MUSCLE_GROUPS.map((muscle) => (
+                        <FilterChip
+                            key={muscle}
+                            label={muscle}
+                            count={countsByMuscle.get(muscle) ?? 0}
+                            active={selectedMuscle === muscle}
+                            color={getMuscleColor(muscle)}
+                            onPress={() => setSelectedMuscle(selectedMuscle === muscle ? null : muscle)}
+                        />
+                    ))}
+                </ScrollView>
+            </View>
 
-            {/* Exercise List */}
-            <ScrollView
-                style={styles.list}
+            <FlatList
+                data={filtered}
+                keyExtractor={(item) => item.id}
                 contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
                 refreshControl={
                     <RefreshControl refreshing={loading} onRefresh={fetchExercises} tintColor={COLORS.primary} />
                 }
-            >
-                {filteredExercises.length === 0 ? (
-                    <Card variant="glass" style={styles.emptyCard}>
-                        <View style={styles.emptyState}>
-                            <Ionicons name="barbell-outline" size={48} color={COLORS.textMuted} />
-                            <Text style={styles.emptyText}>
-                                {searchQuery || selectedMuscle ? 'No hay ejercicios que coincidan' : 'No hay ejercicios aún'}
-                            </Text>
-                            <Button
-                                title="Añadir Ejercicio"
-                                variant="secondary"
-                                size="sm"
-                                onPress={openCreateModal}
-                            />
-                        </View>
-                    </Card>
-                ) : (
-                    filteredExercises.map(exercise => (
-                        <View key={exercise.id} style={styles.exerciseCard}>
-                            <View style={[styles.muscleIndicator, { backgroundColor: getMuscleColor(exercise.muscle_group) }]} />
-                            <TouchableOpacity
-                                style={styles.exerciseInfo}
-                                onPress={() => openEditModal(exercise)}
-                            >
-                                <Text style={styles.exerciseName}>{exercise.name}</Text>
-                                <View style={styles.exerciseMeta}>
-                                    <Text style={styles.exerciseMuscle}>{exercise.muscle_group}</Text>
-                                    {exercise.equipment && (
-                                        <>
-                                            <Text style={styles.metaDot}>•</Text>
-                                            <Text style={styles.exerciseEquipment}>{exercise.equipment}</Text>
-                                        </>
-                                    )}
-                                </View>
-                            </TouchableOpacity>
-                            <View style={styles.exerciseActions}>
-                                <TouchableOpacity
-                                    style={styles.actionButton}
-                                    onPress={() => openEditModal(exercise)}
-                                >
-                                    <Ionicons name="pencil" size={18} color={COLORS.primary} />
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={styles.actionButton}
-                                    onPress={() => handleDeleteExercise(exercise)}
-                                >
-                                    <Ionicons name="trash-outline" size={18} color={COLORS.error} />
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    ))
+                ListEmptyComponent={
+                    <EmptyState
+                        icon="barbell-outline"
+                        title={query || selectedMuscle ? 'Sin coincidencias' : 'No hay ejercicios'}
+                        message={
+                            query || selectedMuscle
+                                ? 'Prueba con otro término o quita el filtro de músculo.'
+                                : 'Crea tu primer ejercicio para empezar a montar rutinas.'
+                        }
+                        actionLabel="Añadir ejercicio"
+                        onAction={() => setEditor({ open: true, editing: null })}
+                    />
+                }
+                renderItem={({ item }) => (
+                    <ExerciseRow
+                        exercise={item}
+                        onPress={() => router.push(`/exercise/${item.id}`)}
+                        onEdit={() => setEditor({ open: true, editing: item })}
+                        onDelete={() => confirmDelete(item)}
+                    />
                 )}
-            </ScrollView>
+            />
 
-            {/* Create/Edit Exercise Modal */}
-            <Modal
-                visible={isModalVisible}
-                animationType="slide"
-                presentationStyle="pageSheet"
-                onRequestClose={() => {
-                    setIsModalVisible(false);
-                    setEditingExercise(null);
+            <ExerciseEditor
+                visible={editor.open}
+                editing={editor.editing}
+                onClose={() => setEditor({ open: false, editing: null })}
+                onSubmit={async (draft) => {
+                    if (editor.editing) await updateExercise(editor.editing.id, draft);
+                    else await createExercise(draft);
                 }}
+            />
+        </View>
+    );
+}
+
+function FilterChip({
+    label,
+    count,
+    active,
+    color,
+    onPress,
+}: {
+    label: string;
+    count: number;
+    active: boolean;
+    color: string;
+    onPress: () => void;
+}) {
+    return (
+        <TouchableOpacity
+            onPress={onPress}
+            style={[
+                styles.filterChip,
+                active && { backgroundColor: color + '25', borderColor: color },
+            ]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+        >
+            <Text style={[styles.filterText, active && { color }]}>{label}</Text>
+            <Text style={[styles.filterCount, active && { color }]}>{count}</Text>
+        </TouchableOpacity>
+    );
+}
+
+const ExerciseRow = React.memo(function ExerciseRow({
+    exercise,
+    onPress,
+    onEdit,
+    onDelete,
+}: {
+    exercise: Exercise;
+    onPress: () => void;
+    onEdit: () => void;
+    onDelete: () => void;
+}) {
+    const color = getMuscleColor(exercise.muscle_group);
+
+    return (
+        <TouchableOpacity style={styles.exerciseCard} onPress={onPress} activeOpacity={0.75}>
+            <View style={[styles.muscleIndicator, { backgroundColor: color }]} />
+
+            <View style={styles.exerciseInfo}>
+                <Text style={styles.exerciseName}>{exercise.name}</Text>
+                <View style={styles.exerciseMeta}>
+                    <Text style={[styles.exerciseMuscle, { color }]}>{exercise.muscle_group}</Text>
+                    {exercise.equipment ? (
+                        <>
+                            <Text style={styles.metaDot}>·</Text>
+                            <Text style={styles.exerciseSecondary}>{exercise.equipment}</Text>
+                        </>
+                    ) : null}
+                    <Text style={styles.metaDot}>·</Text>
+                    <Text style={styles.exerciseSecondary}>
+                        {formatSeconds(exercise.default_rest_seconds)} descanso
+                    </Text>
+                </View>
+            </View>
+
+            <View style={styles.exerciseActions}>
+                <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={onEdit}
+                    accessibilityLabel={`Editar ${exercise.name}`}
+                >
+                    <Ionicons name="pencil" size={17} color={COLORS.textSecondary} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={onDelete}
+                    accessibilityLabel={`Eliminar ${exercise.name}`}
+                >
+                    <Ionicons name="trash-outline" size={17} color={COLORS.error} />
+                </TouchableOpacity>
+            </View>
+        </TouchableOpacity>
+    );
+});
+
+/** Create / edit sheet. Kept at module scope so typing does not remount it. */
+function ExerciseEditor({
+    visible,
+    editing,
+    onClose,
+    onSubmit,
+}: {
+    visible: boolean;
+    editing: Exercise | null;
+    onClose: () => void;
+    onSubmit: (draft: ExerciseDraft) => Promise<void>;
+}) {
+    const insets = useSafeAreaInsets();
+    const [form, setForm] = useState<FormState>(EMPTY_FORM);
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        if (!visible) return;
+        setForm(
+            editing
+                ? {
+                      name: editing.name,
+                      muscleGroup: editing.muscle_group,
+                      equipment: editing.equipment ?? '',
+                      notes: editing.notes ?? '',
+                      restSeconds: editing.default_rest_seconds,
+                      tempo: editing.time_per_rep_seconds,
+                  }
+                : EMPTY_FORM
+        );
+    }, [visible, editing]);
+
+    const patch = (updates: Partial<FormState>) => setForm((prev) => ({ ...prev, ...updates }));
+
+    const submit = async () => {
+        if (!form.name.trim()) {
+            Alert.alert('Falta el nombre', 'Escribe cómo se llama el ejercicio.');
+            return;
+        }
+        if (!form.muscleGroup) {
+            Alert.alert('Falta el grupo muscular', 'Elige a qué músculo pertenece.');
+            return;
+        }
+
+        try {
+            setSaving(true);
+            await onSubmit({
+                name: form.name,
+                muscle_group: form.muscleGroup,
+                equipment: form.equipment,
+                notes: form.notes,
+                default_rest_seconds: form.restSeconds,
+                time_per_rep_seconds: form.tempo,
+            });
+            onClose();
+        } catch (error) {
+            Alert.alert('No se pudo guardar', error instanceof Error ? error.message : 'Inténtalo de nuevo.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+            <KeyboardAvoidingView
+                style={styles.modalContainer}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             >
-                <View style={styles.modalContainer}>
-                    <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>
-                            {editingExercise ? 'Editar Ejercicio' : 'Nuevo Ejercicio'}
-                        </Text>
-                        <IconButton
-                            icon={<Ionicons name="close" size={24} color={COLORS.textSecondary} />}
-                            variant="ghost"
-                            onPress={() => {
-                                setIsModalVisible(false);
-                                setEditingExercise(null);
-                            }}
+                <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>{editing ? 'Editar ejercicio' : 'Nuevo ejercicio'}</Text>
+                    <TouchableOpacity onPress={onClose} style={styles.modalClose} accessibilityLabel="Cerrar">
+                        <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+                    </TouchableOpacity>
+                </View>
+
+                <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
+                    <Field label="Nombre">
+                        <TextInput
+                            style={styles.input}
+                            value={form.name}
+                            onChangeText={(name) => patch({ name })}
+                            placeholder="Ej: Press banca inclinado"
+                            placeholderTextColor={COLORS.textMuted}
+                            autoFocus={!editing}
                         />
-                    </View>
+                    </Field>
 
-                    <ScrollView style={styles.modalContent}>
-                        {/* Name Input */}
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Nombre *</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Ej: Press de banca inclinado"
-                                placeholderTextColor={COLORS.textMuted}
-                                value={name}
-                                onChangeText={setName}
-                            />
-                        </View>
-
-                        {/* Muscle Group Selection */}
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Grupo Muscular *</Text>
-                            <View style={styles.optionsGrid}>
-                                {MUSCLE_GROUPS.map(muscle => (
+                    <Field label="Grupo muscular">
+                        <View style={styles.optionRow}>
+                            {MUSCLE_GROUPS.map((muscle) => {
+                                const active = form.muscleGroup === muscle;
+                                const color = getMuscleColor(muscle);
+                                return (
                                     <TouchableOpacity
                                         key={muscle}
+                                        onPress={() => patch({ muscleGroup: muscle })}
                                         style={[
-                                            styles.optionChip,
-                                            muscleGroup === muscle && styles.optionChipActive,
-                                            muscleGroup === muscle && { borderColor: getMuscleColor(muscle) }
+                                            styles.option,
+                                            active && { backgroundColor: color + '25', borderColor: color },
                                         ]}
-                                        onPress={() => setMuscleGroup(muscle)}
                                     >
-                                        <Text style={[
-                                            styles.optionText,
-                                            muscleGroup === muscle && { color: getMuscleColor(muscle) }
-                                        ]}>
-                                            {muscle}
-                                        </Text>
+                                        <Text style={[styles.optionText, active && { color }]}>{muscle}</Text>
                                     </TouchableOpacity>
-                                ))}
-                            </View>
+                                );
+                            })}
                         </View>
+                    </Field>
 
-                        {/* Equipment Selection */}
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Equipamiento</Text>
-                            <View style={styles.optionsGrid}>
-                                {EQUIPMENT_OPTIONS.map(eq => (
+                    <Field label="Material (opcional)">
+                        <View style={styles.optionRow}>
+                            {EQUIPMENT_OPTIONS.map((option) => {
+                                const active = form.equipment === option;
+                                return (
                                     <TouchableOpacity
-                                        key={eq}
-                                        style={[
-                                            styles.optionChip,
-                                            equipment === eq && styles.optionChipActive
-                                        ]}
-                                        onPress={() => setEquipment(equipment === eq ? '' : eq)}
+                                        key={option}
+                                        onPress={() => patch({ equipment: active ? '' : option })}
+                                        style={[styles.option, active && styles.optionActive]}
                                     >
-                                        <Text style={[
-                                            styles.optionText,
-                                            equipment === eq && styles.optionTextActive
-                                        ]}>
-                                            {eq}
+                                        <Text style={[styles.optionText, active && styles.optionTextActive]}>
+                                            {option}
                                         </Text>
                                     </TouchableOpacity>
-                                ))}
-                            </View>
+                                );
+                            })}
                         </View>
+                    </Field>
 
-                        {/* Notes */}
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Notas (opcional)</Text>
-                            <TextInput
-                                style={[styles.input, styles.textArea]}
-                                placeholder="Indicaciones sobre técnica, variantes, etc."
-                                placeholderTextColor={COLORS.textMuted}
-                                value={notes}
-                                onChangeText={setNotes}
-                                multiline
-                                numberOfLines={3}
-                            />
+                    {/* These two drive rest timers and duration estimates but had no UI. */}
+                    <Field label="Descanso por defecto">
+                        <View style={styles.optionRow}>
+                            {REST_OPTIONS.map((option) => {
+                                const active = form.restSeconds === option;
+                                return (
+                                    <TouchableOpacity
+                                        key={option}
+                                        onPress={() => patch({ restSeconds: option })}
+                                        style={[styles.option, active && styles.optionActive]}
+                                    >
+                                        <Text style={[styles.optionText, active && styles.optionTextActive]}>
+                                            {formatSeconds(option)}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
                         </View>
-                    </ScrollView>
+                    </Field>
 
-                    <View style={styles.modalFooter}>
-                        {editingExercise && (
-                            <Button
-                                title="Eliminar"
-                                variant="secondary"
-                                onPress={() => {
-                                    handleDeleteExercise(editingExercise);
-                                    setIsModalVisible(false);
-                                    setEditingExercise(null);
-                                }}
-                                style={{ marginBottom: SPACING.sm, backgroundColor: 'rgba(239, 68, 68, 0.1)' }}
-                                icon={<Ionicons name="trash-outline" size={18} color={COLORS.error} />}
-                            />
-                        )}
-                        <Button
-                            title={editingExercise ? 'Guardar Cambios' : 'Crear Ejercicio'}
-                            variant="gradient"
-                            onPress={editingExercise ? handleUpdateExercise : handleCreateExercise}
-                            fullWidth
+                    <Field label="Tiempo por repetición">
+                        <View style={styles.optionRow}>
+                            {TEMPO_OPTIONS.map((option) => {
+                                const active = form.tempo === option;
+                                return (
+                                    <TouchableOpacity
+                                        key={option}
+                                        onPress={() => patch({ tempo: option })}
+                                        style={[styles.option, active && styles.optionActive]}
+                                    >
+                                        <Text style={[styles.optionText, active && styles.optionTextActive]}>
+                                            {option}s
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+                    </Field>
+
+                    <Field label="Notas (opcional)">
+                        <TextInput
+                            style={[styles.input, styles.textArea]}
+                            value={form.notes}
+                            onChangeText={(notes) => patch({ notes })}
+                            placeholder="Detalles de técnica, agarre, ajustes de máquina…"
+                            placeholderTextColor={COLORS.textMuted}
+                            multiline
                         />
-                    </View>
+                    </Field>
+                </ScrollView>
+
+                <View style={[styles.modalFooter, { paddingBottom: Math.max(insets.bottom, SPACING.md) }]}>
+                    <Button
+                        title={editing ? 'Guardar cambios' : 'Crear ejercicio'}
+                        variant="gradient"
+                        size="lg"
+                        fullWidth
+                        loading={saving}
+                        onPress={submit}
+                    />
                 </View>
-            </Modal>
+            </KeyboardAvoidingView>
+        </Modal>
+    );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+    return (
+        <View style={styles.field}>
+            <Text style={styles.fieldLabel}>{label}</Text>
+            {children}
         </View>
     );
 }
@@ -432,178 +508,109 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: COLORS.background,
     },
-    header: {
-        paddingHorizontal: SPACING.lg,
-        paddingTop: SPACING.xl,
-        paddingBottom: SPACING.lg,
-    },
-    headerContent: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    headerTextContainer: {
-        flex: 1,
-    },
-    headerSubtitle: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: COLORS.primary,
-        letterSpacing: 3,
-        marginBottom: 4,
-        textTransform: 'uppercase',
-    },
-    headerTitle: {
-        fontSize: 36,
-        fontWeight: '800',
-        color: COLORS.textPrimary,
-    },
-    headerButtons: {
-        flexDirection: 'row',
-        gap: SPACING.sm,
-    },
-    headerBtnPrimary: {
-        borderRadius: 14,
-        overflow: 'hidden',
-    },
-    headerBtnGradient: {
-        width: 48,
-        height: 48,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
     searchContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: COLORS.surface,
+        gap: SPACING.sm,
         marginHorizontal: SPACING.lg,
-        borderRadius: BORDER_RADIUS.full,
         paddingHorizontal: SPACING.md,
-        marginBottom: SPACING.md,
-    },
-    searchIcon: {
-        marginRight: SPACING.sm,
+        height: 46,
+        backgroundColor: COLORS.surface,
+        borderRadius: BORDER_RADIUS.md,
+        borderWidth: 1,
+        borderColor: COLORS.surfaceHighlight,
     },
     searchInput: {
         flex: 1,
         color: COLORS.textPrimary,
-        paddingVertical: SPACING.sm,
-        fontSize: FONT_SIZES.md,
+        fontSize: FONT_SIZES.sm,
     },
-    filterContainer: {
-        maxHeight: 44,
-        marginBottom: SPACING.md,
+    filterWrapper: {
+        paddingVertical: SPACING.md,
     },
     filterContent: {
         paddingHorizontal: SPACING.lg,
-        gap: 8,
-        paddingBottom: 4,
-    },
-    filterChipWrapper: {
-        borderRadius: BORDER_RADIUS.full,
-        overflow: 'hidden',
+        gap: SPACING.xs,
     },
     filterChip: {
-        paddingHorizontal: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: SPACING.md,
         paddingVertical: 8,
         borderRadius: BORDER_RADIUS.full,
         backgroundColor: COLORS.surface,
         borderWidth: 1,
         borderColor: COLORS.surfaceHighlight,
-        minWidth: 70,
-        alignItems: 'center',
-    },
-    filterChipActive: {
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: BORDER_RADIUS.full,
-        minWidth: 70,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.2)',
     },
     filterText: {
-        color: COLORS.textSecondary,
-        fontSize: FONT_SIZES.sm,
-        fontWeight: '600',
-    },
-    filterTextActive: {
-        color: '#FFF',
-        fontSize: FONT_SIZES.sm,
+        fontSize: FONT_SIZES.xs,
         fontWeight: '700',
-        textShadowColor: 'rgba(0,0,0,0.2)',
-        textShadowOffset: { width: 0, height: 1 },
-        textShadowRadius: 2,
+        color: COLORS.textSecondary,
     },
-    list: {
-        flex: 1,
+    filterCount: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: COLORS.textMuted,
     },
     listContent: {
         paddingHorizontal: SPACING.lg,
-        paddingBottom: 100,
-    },
-    emptyCard: {
-        minHeight: 180,
-        justifyContent: 'center',
-    },
-    emptyState: {
-        alignItems: 'center',
+        paddingBottom: SPACING.xxl,
         gap: SPACING.sm,
-    },
-    emptyText: {
-        color: COLORS.textSecondary,
-        fontSize: FONT_SIZES.md,
-        marginBottom: SPACING.sm,
     },
     exerciseCard: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: COLORS.surface,
         borderRadius: BORDER_RADIUS.md,
-        padding: SPACING.md,
-        marginBottom: SPACING.sm,
         borderWidth: 1,
         borderColor: COLORS.surfaceHighlight,
+        overflow: 'hidden',
+        paddingRight: SPACING.xs,
     },
     muscleIndicator: {
         width: 4,
-        height: 40,
-        borderRadius: 2,
-        marginRight: SPACING.md,
+        alignSelf: 'stretch',
     },
     exerciseInfo: {
         flex: 1,
+        paddingVertical: SPACING.md,
+        paddingLeft: SPACING.md,
     },
     exerciseName: {
-        fontSize: FONT_SIZES.md,
+        fontSize: FONT_SIZES.sm,
         fontWeight: '600',
         color: COLORS.textPrimary,
-        marginBottom: 2,
     },
     exerciseMeta: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: 5,
+        marginTop: 3,
+        flexWrap: 'wrap',
     },
     exerciseMuscle: {
-        fontSize: FONT_SIZES.sm,
-        color: COLORS.textSecondary,
+        fontSize: 11,
+        fontWeight: '700',
+    },
+    exerciseSecondary: {
+        fontSize: 11,
+        color: COLORS.textMuted,
     },
     metaDot: {
-        color: COLORS.textMuted,
-        marginHorizontal: 6,
-    },
-    exerciseEquipment: {
-        fontSize: FONT_SIZES.sm,
+        fontSize: 11,
         color: COLORS.textMuted,
     },
     exerciseActions: {
         flexDirection: 'row',
-        gap: SPACING.xs,
+        gap: 2,
     },
     actionButton: {
-        padding: SPACING.sm,
-        borderRadius: BORDER_RADIUS.md,
-        backgroundColor: COLORS.surfaceLight,
+        width: 38,
+        height: 38,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 19,
     },
     modalContainer: {
         flex: 1,
@@ -611,9 +618,10 @@ const styles = StyleSheet.create({
     },
     modalHeader: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        padding: SPACING.md,
+        justifyContent: 'space-between',
+        paddingHorizontal: SPACING.md,
+        paddingVertical: SPACING.sm,
         borderBottomWidth: 1,
         borderBottomColor: COLORS.surfaceHighlight,
     },
@@ -622,60 +630,71 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: COLORS.textPrimary,
     },
+    modalClose: {
+        width: HIT_SIZE,
+        height: HIT_SIZE,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     modalContent: {
-        flex: 1,
-        padding: SPACING.lg,
+        padding: SPACING.md,
+        gap: SPACING.lg,
+        paddingBottom: SPACING.xl,
     },
-    inputGroup: {
-        marginBottom: SPACING.lg,
+    modalFooter: {
+        paddingHorizontal: SPACING.md,
+        paddingTop: SPACING.md,
+        borderTopWidth: 1,
+        borderTopColor: COLORS.surfaceHighlight,
+        backgroundColor: COLORS.surface,
     },
-    label: {
-        fontSize: FONT_SIZES.sm,
+    field: {
+        gap: SPACING.sm,
+    },
+    fieldLabel: {
+        fontSize: FONT_SIZES.xs,
+        fontWeight: '700',
         color: COLORS.textSecondary,
-        marginBottom: SPACING.sm,
-        fontWeight: '600',
+        textTransform: 'uppercase',
+        letterSpacing: 0.8,
     },
     input: {
         backgroundColor: COLORS.surface,
         borderRadius: BORDER_RADIUS.md,
-        padding: SPACING.md,
-        color: COLORS.textPrimary,
         borderWidth: 1,
         borderColor: COLORS.surfaceHighlight,
+        paddingHorizontal: SPACING.md,
+        paddingVertical: SPACING.md,
+        color: COLORS.textPrimary,
         fontSize: FONT_SIZES.md,
     },
     textArea: {
-        height: 80,
+        minHeight: 88,
         textAlignVertical: 'top',
     },
-    optionsGrid: {
+    optionRow: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: SPACING.sm,
+        gap: SPACING.xs,
     },
-    optionChip: {
+    option: {
         paddingHorizontal: SPACING.md,
-        paddingVertical: SPACING.sm,
-        borderRadius: BORDER_RADIUS.md,
+        paddingVertical: 8,
+        borderRadius: BORDER_RADIUS.full,
         backgroundColor: COLORS.surface,
         borderWidth: 1,
         borderColor: COLORS.surfaceHighlight,
     },
-    optionChipActive: {
+    optionActive: {
+        backgroundColor: COLORS.primary + '25',
         borderColor: COLORS.primary,
-        backgroundColor: COLORS.surfaceLight,
     },
     optionText: {
+        fontSize: FONT_SIZES.xs,
+        fontWeight: '600',
         color: COLORS.textSecondary,
-        fontSize: FONT_SIZES.sm,
     },
     optionTextActive: {
-        color: COLORS.primary,
-    },
-    modalFooter: {
-        padding: SPACING.lg,
-        paddingBottom: SPACING.xl,
-        borderTopWidth: 1,
-        borderTopColor: COLORS.surfaceHighlight,
+        color: COLORS.primaryLight,
     },
 });

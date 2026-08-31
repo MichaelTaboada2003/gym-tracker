@@ -1,6 +1,32 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+/**
+ * Local-first persistence layer.
+ *
+ * Everything is stored in AsyncStorage as one JSON array per "table". Three
+ * properties matter here and are easy to lose:
+ *
+ * 1. **No lost updates.** Every mutation is a read-modify-write of a whole
+ *    table, so two concurrent writes to the same key would clobber each other.
+ *    All access to a key goes through `withLock`, which serialises it.
+ * 2. **No repeated parsing.** Tables are cached in memory after the first read;
+ *    reads hand back a shallow copy so callers can sort in place safely.
+ * 3. **Migrations run once.** Earlier versions re-derived rest times on every
+ *    launch, which silently reset anything the user had customised. Migrations
+ *    are now numbered and recorded in `SCHEMA_VERSION_KEY`.
+ */
 
-// Storage keys
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+    Exercise,
+    Plan,
+    PlanRoutine,
+    Routine,
+    RoutineExercise,
+    WeightLog,
+    WorkoutLog,
+    WorkoutSession,
+} from './database.types';
+import { SEED_EXERCISES, SEED_ROUTINES, SEED_ROUTINE_EXERCISES } from './seedData';
+
 export const STORAGE_KEYS = {
     EXERCISES: '@gym_tracker_exercises',
     ROUTINES: '@gym_tracker_routines',
@@ -10,377 +36,473 @@ export const STORAGE_KEYS = {
     WORKOUT_SESSIONS: '@gym_tracker_workout_sessions',
     WORKOUT_LOGS: '@gym_tracker_workout_logs',
     BODY_WEIGHT: '@gym_tracker_body_weight',
-};
+    ACTIVE_WORKOUT: '@gym_tracker_active_workout',
+    SETTINGS: '@gym_tracker_settings',
+} as const;
 
-// Clear all data (useful for debugging/reset)
-export const clearAllData = async (): Promise<void> => {
+const SCHEMA_VERSION_KEY = '@gym_tracker_schema_version';
+
+// =============================================================================
+// Primitives: cache + per-key serialisation
+// =============================================================================
+
+const cache = new Map<string, unknown[]>();
+/** Tail of the pending operation chain for each key. */
+const locks = new Map<string, Promise<unknown>>();
+
+/**
+ * Runs `fn` only after every previously queued operation on `key` has settled,
+ * so read-modify-write cycles can never interleave.
+ */
+function withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    const previous = locks.get(key) ?? Promise.resolve();
+    const next = previous.then(fn, fn);
+    // Keep the chain alive even if this operation rejects.
+    locks.set(
+        key,
+        next.catch(() => undefined)
+    );
+    return next;
+}
+
+async function readTable<T>(key: string): Promise<T[]> {
+    const cached = cache.get(key);
+    if (cached) return cached as T[];
+
     try {
-        const keys = Object.values(STORAGE_KEYS);
-        await AsyncStorage.multiRemove(keys);
-        console.log('✅ All data cleared');
+        const raw = await AsyncStorage.getItem(key);
+        const parsed = raw ? JSON.parse(raw) : [];
+        const rows = Array.isArray(parsed) ? parsed : [];
+        cache.set(key, rows);
+        return rows as T[];
     } catch (error) {
-        console.error('Error clearing data:', error);
-    }
-};
-
-// Rest time mapping based on exercise patterns
-const REST_TIME_MAP: Record<string, number> = {
-    // Compound heavy exercises - 2.5 min (150s)
-    'Press Banca Plano': 150,
-    'Dominadas': 150,
-    'Sentadilla Libre': 150,
-
-    // Compound secondary - 2 min (120s)
-    'Remo con Barra': 120,
-    'Peso Muerto Rumano': 120,
-    'Press Inclinado (Barra': 120,
-    'Hack Squat': 120,
-
-    // Accessories - 90s-2min (105s)
-    'Press Inclinado con Mancuernas': 105,
-    'Press Militar': 105,
-    'Prensa de Piernas': 105,
-    'Jalón al Pecho': 105,
-    'Zancadas': 105,
-
-    // Isolation medium - 90s
-    'Fondos': 90,
-    'Curl con Barra': 90,
-    'Remo en Polea': 90,
-    'Remo en Máquina': 90,
-    'Press Francés': 90,
-    'Curl Predicador': 90,
-    'Extensión de Cuádriceps': 90,
-
-    // Isolation light - 60-90s (75s)
-    'Elevaciones Laterales': 75,
-    'Curl Inclinado': 75,
-    'Curl Femoral': 75,
-    'Pullover': 75,
-    'Peck Deck': 75,
-    'Curl Martillo': 75,
-
-    // Finishers - 60s
-    'Extensión de Tríceps': 60,
-    'Face Pull': 60,
-    'Elevación de Talones': 60,
-    'Gemelos': 60,
-    'Pájaros': 60,
-    'Extensión Tríceps Unilateral': 60,
-};
-
-// Migrate rest times for existing routine exercises
-export const migrateRestTimes = async (): Promise<void> => {
-    try {
-        const routineExercises = await getAll<any>(STORAGE_KEYS.ROUTINE_EXERCISES);
-        const exercises = await getAll<any>(STORAGE_KEYS.EXERCISES);
-
-        let updated = 0;
-
-        const updatedRoutineExercises = routineExercises.map((re: any) => {
-            const exercise = exercises.find((e: any) => e.id === re.exercise_id);
-            if (!exercise) return re;
-
-            // Find matching rest time
-            let restTime = 90; // default
-            for (const [pattern, time] of Object.entries(REST_TIME_MAP)) {
-                if (exercise.name.includes(pattern)) {
-                    restTime = time;
-                    break;
-                }
-            }
-
-            // Update notes with rest time
-            let notes: any = {};
-            if (re.notes) {
-                try {
-                    notes = JSON.parse(re.notes);
-                } catch {
-                    notes = { originalNotes: re.notes };
-                }
-            }
-
-            if (notes.restTime !== restTime) {
-                notes.restTime = restTime;
-                updated++;
-            }
-
-            return {
-                ...re,
-                notes: JSON.stringify(notes),
-            };
-        });
-
-        if (updated > 0) {
-            await saveAll(STORAGE_KEYS.ROUTINE_EXERCISES, updatedRoutineExercises);
-            console.log(`✅ Migrated rest times for ${updated} exercises`);
-        } else {
-            console.log('✅ Rest times already up to date');
-        }
-    } catch (error) {
-        console.error('Error migrating rest times:', error);
-    }
-};
-
-// Time per rep mapping based on exercise patterns
-const TIME_PER_REP_MAP: Record<string, number> = {
-    // Heavy/Slow (4-5s per rep)
-    'Sentadilla': 4,
-    'Peso Muerto': 5,
-    'Dominadas': 4,
-    'Fondos': 4,
-    'Hack Squat': 4,
-    'Zancadas': 4,
-    'Curl Inclinado': 4,
-
-    // Standard (3s per rep)
-    'Press Banca': 3,
-    'Press Inclinado': 3,
-    'Press Militar': 3,
-    'Remo': 3,
-    'Curl con Barra': 3,
-    'Curl Predicador': 3,
-    'Curl Martillo': 3,
-    'Prensa': 3,
-    'Extensión de Cuádriceps': 3,
-    'Curl Femoral': 3,
-    'Jalón': 3,
-    'Pullover': 3,
-    'Peck Deck': 3,
-    'Press Francés': 3,
-
-    // Fast (2s per rep)
-    'Elevaciones Laterales': 2,
-    'Face Pull': 2,
-    'Extensión de Tríceps': 2,
-    'Extensión Tríceps': 2,
-    'Elevación de Talones': 2,
-    'Gemelos': 2,
-    'Pájaros': 2,
-};
-
-// Migrate time per rep for existing exercises
-export const migrateTimePerRep = async (): Promise<void> => {
-    try {
-        // Update base exercises
-        const exercises = await getAll<any>(STORAGE_KEYS.EXERCISES);
-        let updatedExercises = 0;
-
-        const newExercises = exercises.map((ex: any) => {
-            let timePerRep = 3; // default
-            for (const [pattern, time] of Object.entries(TIME_PER_REP_MAP)) {
-                if (ex.name.includes(pattern)) {
-                    timePerRep = time;
-                    break;
-                }
-            }
-
-            if (ex.time_per_rep_seconds !== timePerRep) {
-                updatedExercises++;
-                return { ...ex, time_per_rep_seconds: timePerRep };
-            }
-            return ex;
-        });
-
-        if (updatedExercises > 0) {
-            await saveAll(STORAGE_KEYS.EXERCISES, newExercises);
-            console.log(`✅ Updated time_per_rep for ${updatedExercises} exercises`);
-        }
-
-        // Update routine_exercises notes with timePerRep
-        const routineExercises = await getAll<any>(STORAGE_KEYS.ROUTINE_EXERCISES);
-        let updatedRoutineEx = 0;
-
-        const newRoutineExercises = routineExercises.map((re: any) => {
-            const exercise = newExercises.find((e: any) => e.id === re.exercise_id);
-            if (!exercise) return re;
-
-            let notes: any = {};
-            if (re.notes) {
-                try {
-                    notes = JSON.parse(re.notes);
-                } catch {
-                    notes = {};
-                }
-            }
-
-            const expectedTimePerRep = exercise.time_per_rep_seconds || 3;
-            if (notes.timePerRep !== expectedTimePerRep) {
-                notes.timePerRep = expectedTimePerRep;
-                updatedRoutineEx++;
-                return { ...re, notes: JSON.stringify(notes) };
-            }
-            return re;
-        });
-
-        if (updatedRoutineEx > 0) {
-            await saveAll(STORAGE_KEYS.ROUTINE_EXERCISES, newRoutineExercises);
-            console.log(`✅ Migrated timePerRep for ${updatedRoutineEx} routine exercises`);
-        }
-    } catch (error) {
-        console.error('Error migrating time per rep:', error);
-    }
-};
-
-// Generic storage functions
-async function getAll<T>(key: string): Promise<T[]> {
-    try {
-        const data = await AsyncStorage.getItem(key);
-        return data ? JSON.parse(data) : [];
-    } catch (error) {
-        console.error(`Error getting ${key}:`, error);
+        console.error(`[db] could not read ${key}:`, error);
+        cache.set(key, []);
         return [];
     }
 }
 
-async function saveAll<T>(key: string, data: T[]): Promise<void> {
-    try {
-        await AsyncStorage.setItem(key, JSON.stringify(data));
-    } catch (error) {
-        console.error(`Error saving ${key}:`, error);
-        throw error;
-    }
+async function writeTable<T>(key: string, rows: T[]): Promise<void> {
+    cache.set(key, rows as unknown[]);
+    await AsyncStorage.setItem(key, JSON.stringify(rows));
 }
 
-async function addItem<T extends { id: string }>(key: string, item: T): Promise<void> {
-    const items = await getAll<T>(key);
-    items.push(item);
-    await saveAll(key, items);
+/** Reads a table. The array is a copy; the rows inside are shared and must be treated as immutable. */
+async function getAll<T>(key: string): Promise<T[]> {
+    return withLock(key, async () => [...(await readTable<T>(key))]);
 }
 
-async function updateItem<T extends { id: string }>(key: string, id: string, updates: Partial<T>): Promise<void> {
-    const items = await getAll<T>(key);
-    const index = items.findIndex(item => item.id === id);
-    if (index !== -1) {
-        items[index] = { ...items[index], ...updates };
-        await saveAll(key, items);
-    }
+async function saveAll<T>(key: string, rows: T[]): Promise<void> {
+    return withLock(key, () => writeTable(key, rows));
 }
 
-async function deleteItem<T extends { id: string }>(key: string, id: string): Promise<void> {
-    const items = await getAll<T>(key);
-    const filtered = items.filter(item => item.id !== id);
-    await saveAll(key, filtered);
+async function addItem<T extends { id: string }>(key: string, item: T): Promise<T> {
+    return withLock(key, async () => {
+        const rows = await readTable<T>(key);
+        await writeTable(key, [...rows, item]);
+        return item;
+    });
+}
+
+/** Inserts many rows in a single write — the loop-of-awaits version was O(n) full-table writes. */
+async function addMany<T extends { id: string }>(key: string, items: T[]): Promise<void> {
+    if (items.length === 0) return;
+    return withLock(key, async () => {
+        const rows = await readTable<T>(key);
+        await writeTable(key, [...rows, ...items]);
+    });
+}
+
+async function updateItem<T extends { id: string }>(
+    key: string,
+    id: string,
+    updates: Partial<T>
+): Promise<T | null> {
+    return withLock(key, async () => {
+        const rows = await readTable<T>(key);
+        const index = rows.findIndex((row) => row.id === id);
+        if (index === -1) return null;
+
+        const updated = { ...rows[index], ...updates };
+        const next = [...rows];
+        next[index] = updated;
+        await writeTable(key, next);
+        return updated;
+    });
+}
+
+async function deleteItem(key: string, id: string): Promise<void> {
+    return withLock(key, async () => {
+        const rows = await readTable<{ id: string }>(key);
+        await writeTable(
+            key,
+            rows.filter((row) => row.id !== id)
+        );
+    });
+}
+
+async function deleteWhere<T>(key: string, predicate: (row: T) => boolean): Promise<number> {
+    return withLock(key, async () => {
+        const rows = await readTable<T>(key);
+        const next = rows.filter((row) => !predicate(row));
+        if (next.length === rows.length) return 0;
+        await writeTable(key, next);
+        return rows.length - next.length;
+    });
 }
 
 async function getById<T extends { id: string }>(key: string, id: string): Promise<T | null> {
-    const items = await getAll<T>(key);
-    return items.find(item => item.id === id) || null;
+    const rows = await getAll<T>(key);
+    return rows.find((row) => row.id === id) ?? null;
 }
 
-// Helper to generate UUIDs
-export const generateId = (): string => {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+/** Replaces every row matching `predicate` with the supplied rows, atomically. */
+async function replaceWhere<T>(key: string, predicate: (row: T) => boolean, rows: T[]): Promise<void> {
+    return withLock(key, async () => {
+        const existing = await readTable<T>(key);
+        await writeTable(key, [...existing.filter((row) => !predicate(row)), ...rows]);
+    });
+}
+
+// =============================================================================
+// Ids
+// =============================================================================
+
+/**
+ * RFC-4122-shaped v4 id. Not cryptographically random, but it only has to be
+ * unique inside one device's storage.
+ */
+export const generateId = (): string =>
+    'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
         const r = (Math.random() * 16) | 0;
         const v = c === 'x' ? r : (r & 0x3) | 0x8;
         return v.toString(16);
     });
-};
 
-import { SEED_EXERCISES, SEED_ROUTINES, SEED_ROUTINE_EXERCISES } from './seedData';
+// =============================================================================
+// Public table API
+// =============================================================================
 
-// Initialize database (check if seeded)
-export const initializeDatabase = async (): Promise<void> => {
-    try {
-        const exercises = await getAll(STORAGE_KEYS.EXERCISES);
-        const routines = await getAll(STORAGE_KEYS.ROUTINES);
-
-        if (exercises.length === 0 || routines.length === 0) {
-            console.log('🌱 Seeding database with default data...');
-
-            // Seed Exercises if empty
-            if (exercises.length === 0) {
-                await saveAll(STORAGE_KEYS.EXERCISES, SEED_EXERCISES);
-                console.log('✅ Exercises seeded');
-            }
-
-            // Seed Routines if empty
-            if (routines.length === 0) {
-                await saveAll(STORAGE_KEYS.ROUTINES, SEED_ROUTINES);
-                await saveAll(STORAGE_KEYS.ROUTINE_EXERCISES, SEED_ROUTINE_EXERCISES);
-                console.log('✅ Routines seeded');
-            }
-        } else {
-            console.log('✅ Database already initialized');
-        }
-    } catch (error) {
-        console.error('Error initializing database:', error);
-    }
-};
-
-// Manually seed/reset database
-export const seedDatabase = async (): Promise<void> => {
-    try {
-        await saveAll(STORAGE_KEYS.EXERCISES, SEED_EXERCISES);
-        await saveAll(STORAGE_KEYS.ROUTINES, SEED_ROUTINES);
-        await saveAll(STORAGE_KEYS.ROUTINE_EXERCISES, SEED_ROUTINE_EXERCISES);
-        console.log('✅ Database manually seeded');
-    } catch (error) {
-        console.error('Error manual seeding:', error);
-    }
-};
-
-// Export storage interface
 export const storage = {
     exercises: {
-        getAll: () => getAll(STORAGE_KEYS.EXERCISES),
-        add: (item: any) => addItem(STORAGE_KEYS.EXERCISES, item),
-        update: (id: string, updates: any) => updateItem(STORAGE_KEYS.EXERCISES, id, updates),
+        getAll: () => getAll<Exercise>(STORAGE_KEYS.EXERCISES),
+        getById: (id: string) => getById<Exercise>(STORAGE_KEYS.EXERCISES, id),
+        add: (item: Exercise) => addItem(STORAGE_KEYS.EXERCISES, item),
+        update: (id: string, updates: Partial<Exercise>) =>
+            updateItem<Exercise>(STORAGE_KEYS.EXERCISES, id, updates),
         delete: (id: string) => deleteItem(STORAGE_KEYS.EXERCISES, id),
-        getById: (id: string) => getById(STORAGE_KEYS.EXERCISES, id),
     },
+
     routines: {
-        getAll: () => getAll(STORAGE_KEYS.ROUTINES),
-        add: (item: any) => addItem(STORAGE_KEYS.ROUTINES, item),
-        update: (id: string, updates: any) => updateItem(STORAGE_KEYS.ROUTINES, id, updates),
+        getAll: () => getAll<Routine>(STORAGE_KEYS.ROUTINES),
+        getById: (id: string) => getById<Routine>(STORAGE_KEYS.ROUTINES, id),
+        add: (item: Routine) => addItem(STORAGE_KEYS.ROUTINES, item),
+        update: (id: string, updates: Partial<Routine>) =>
+            updateItem<Routine>(STORAGE_KEYS.ROUTINES, id, updates),
         delete: (id: string) => deleteItem(STORAGE_KEYS.ROUTINES, id),
-        getById: (id: string) => getById(STORAGE_KEYS.ROUTINES, id),
     },
+
     routineExercises: {
-        getAll: () => getAll(STORAGE_KEYS.ROUTINE_EXERCISES),
-        add: (item: any) => addItem(STORAGE_KEYS.ROUTINE_EXERCISES, item),
-        deleteByRoutineId: async (routineId: string) => {
-            const items = await getAll<any>(STORAGE_KEYS.ROUTINE_EXERCISES);
-            const filtered = items.filter((item: any) => item.routine_id !== routineId);
-            await saveAll(STORAGE_KEYS.ROUTINE_EXERCISES, filtered);
-        },
-        getByRoutineId: async (routineId: string) => {
-            const items = await getAll<any>(STORAGE_KEYS.ROUTINE_EXERCISES);
-            return items.filter((item: any) => item.routine_id === routineId);
-        },
+        getAll: () => getAll<RoutineExercise>(STORAGE_KEYS.ROUTINE_EXERCISES),
+        addMany: (items: RoutineExercise[]) => addMany(STORAGE_KEYS.ROUTINE_EXERCISES, items),
+        /** Swaps a routine's whole exercise list in one write. */
+        replaceForRoutine: (routineId: string, items: RoutineExercise[]) =>
+            replaceWhere<RoutineExercise>(
+                STORAGE_KEYS.ROUTINE_EXERCISES,
+                (row) => row.routine_id === routineId,
+                items
+            ),
+        deleteByRoutineId: (routineId: string) =>
+            deleteWhere<RoutineExercise>(
+                STORAGE_KEYS.ROUTINE_EXERCISES,
+                (row) => row.routine_id === routineId
+            ),
+        deleteByExerciseId: (exerciseId: string) =>
+            deleteWhere<RoutineExercise>(
+                STORAGE_KEYS.ROUTINE_EXERCISES,
+                (row) => row.exercise_id === exerciseId
+            ),
     },
+
     plans: {
-        getAll: () => getAll(STORAGE_KEYS.PLANS),
-        add: (item: any) => addItem(STORAGE_KEYS.PLANS, item),
-        update: (id: string, updates: any) => updateItem(STORAGE_KEYS.PLANS, id, updates),
+        getAll: () => getAll<Plan>(STORAGE_KEYS.PLANS),
+        getById: (id: string) => getById<Plan>(STORAGE_KEYS.PLANS, id),
+        add: (item: Plan) => addItem(STORAGE_KEYS.PLANS, item),
+        update: (id: string, updates: Partial<Plan>) => updateItem<Plan>(STORAGE_KEYS.PLANS, id, updates),
         delete: (id: string) => deleteItem(STORAGE_KEYS.PLANS, id),
-        getById: (id: string) => getById(STORAGE_KEYS.PLANS, id),
     },
+
     planRoutines: {
-        getAll: () => getAll(STORAGE_KEYS.PLAN_ROUTINES),
-        add: (item: any) => addItem(STORAGE_KEYS.PLAN_ROUTINES, item),
-        deleteByPlanId: async (planId: string) => {
-            const items = await getAll<any>(STORAGE_KEYS.PLAN_ROUTINES);
-            const filtered = items.filter((item: any) => item.plan_id !== planId);
-            await saveAll(STORAGE_KEYS.PLAN_ROUTINES, filtered);
-        },
-        getByPlanId: async (planId: string) => {
-            const items = await getAll<any>(STORAGE_KEYS.PLAN_ROUTINES);
-            return items.filter((item: any) => item.plan_id === planId);
-        },
+        getAll: () => getAll<PlanRoutine>(STORAGE_KEYS.PLAN_ROUTINES),
+        addMany: (items: PlanRoutine[]) => addMany(STORAGE_KEYS.PLAN_ROUTINES, items),
+        replaceForPlan: (planId: string, items: PlanRoutine[]) =>
+            replaceWhere<PlanRoutine>(STORAGE_KEYS.PLAN_ROUTINES, (row) => row.plan_id === planId, items),
+        deleteByPlanId: (planId: string) =>
+            deleteWhere<PlanRoutine>(STORAGE_KEYS.PLAN_ROUTINES, (row) => row.plan_id === planId),
+        deleteByRoutineId: (routineId: string) =>
+            deleteWhere<PlanRoutine>(STORAGE_KEYS.PLAN_ROUTINES, (row) => row.routine_id === routineId),
     },
+
     workoutSessions: {
-        getAll: () => getAll(STORAGE_KEYS.WORKOUT_SESSIONS),
-        add: (item: any) => addItem(STORAGE_KEYS.WORKOUT_SESSIONS, item),
-        update: (id: string, updates: any) => updateItem(STORAGE_KEYS.WORKOUT_SESSIONS, id, updates),
-        getById: (id: string) => getById(STORAGE_KEYS.WORKOUT_SESSIONS, id),
+        getAll: () => getAll<WorkoutSession>(STORAGE_KEYS.WORKOUT_SESSIONS),
+        getById: (id: string) => getById<WorkoutSession>(STORAGE_KEYS.WORKOUT_SESSIONS, id),
+        add: (item: WorkoutSession) => addItem(STORAGE_KEYS.WORKOUT_SESSIONS, item),
+        update: (id: string, updates: Partial<WorkoutSession>) =>
+            updateItem<WorkoutSession>(STORAGE_KEYS.WORKOUT_SESSIONS, id, updates),
+        delete: (id: string) => deleteItem(STORAGE_KEYS.WORKOUT_SESSIONS, id),
     },
+
     workoutLogs: {
-        getAll: () => getAll(STORAGE_KEYS.WORKOUT_LOGS),
-        add: (item: any) => addItem(STORAGE_KEYS.WORKOUT_LOGS, item),
-        getBySessionId: async (sessionId: string) => {
-            const items = await getAll<any>(STORAGE_KEYS.WORKOUT_LOGS);
-            return items.filter((item: any) => item.session_id === sessionId);
-        },
+        getAll: () => getAll<WorkoutLog>(STORAGE_KEYS.WORKOUT_LOGS),
+        addMany: (items: WorkoutLog[]) => addMany(STORAGE_KEYS.WORKOUT_LOGS, items),
+        deleteBySessionId: (sessionId: string) =>
+            deleteWhere<WorkoutLog>(STORAGE_KEYS.WORKOUT_LOGS, (row) => row.session_id === sessionId),
+        deleteByExerciseId: (exerciseId: string) =>
+            deleteWhere<WorkoutLog>(STORAGE_KEYS.WORKOUT_LOGS, (row) => row.exercise_id === exerciseId),
     },
+
+    bodyWeight: {
+        getAll: () => getAll<WeightLog>(STORAGE_KEYS.BODY_WEIGHT),
+        saveAll: (rows: WeightLog[]) => saveAll(STORAGE_KEYS.BODY_WEIGHT, rows),
+        delete: (id: string) => deleteItem(STORAGE_KEYS.BODY_WEIGHT, id),
+    },
+};
+
+// =============================================================================
+// Cascading deletes
+// =============================================================================
+
+/** Removes a routine plus every plan slot that referenced it. */
+export async function deleteRoutineCascade(routineId: string): Promise<void> {
+    await storage.routineExercises.deleteByRoutineId(routineId);
+    await storage.planRoutines.deleteByRoutineId(routineId);
+    await storage.routines.delete(routineId);
+}
+
+/** Removes an exercise plus every routine slot that referenced it. Logged history is kept. */
+export async function deleteExerciseCascade(exerciseId: string): Promise<void> {
+    await storage.routineExercises.deleteByExerciseId(exerciseId);
+    await storage.exercises.delete(exerciseId);
+}
+
+/** Removes a plan plus its day assignments. */
+export async function deletePlanCascade(planId: string): Promise<void> {
+    await storage.planRoutines.deleteByPlanId(planId);
+    await storage.plans.delete(planId);
+}
+
+/** Removes a session and every set logged inside it. */
+export async function deleteSessionCascade(sessionId: string): Promise<void> {
+    await storage.workoutLogs.deleteBySessionId(sessionId);
+    await storage.workoutSessions.delete(sessionId);
+}
+
+// =============================================================================
+// Seeding
+// =============================================================================
+
+const DEFAULT_REST_BY_TEMPO: Record<number, number> = { 2: 60, 3: 90, 4: 120, 5: 150 };
+
+function normaliseSeedExercise(raw: (typeof SEED_EXERCISES)[number], now: string): Exercise {
+    const tempo = raw.time_per_rep_seconds || 3;
+    return {
+        id: raw.id,
+        name: raw.name,
+        muscle_group: raw.muscle_group,
+        equipment: raw.equipment ?? '',
+        notes: null,
+        created_at: now,
+        time_per_rep_seconds: tempo,
+        default_rest_seconds: DEFAULT_REST_BY_TEMPO[tempo] ?? 90,
+    };
+}
+
+function normaliseSeedRoutineExercise(raw: (typeof SEED_ROUTINE_EXERCISES)[number]): RoutineExercise {
+    const exercise = SEED_EXERCISES.find((e) => e.id === raw.exercise_id);
+    return {
+        id: raw.id,
+        routine_id: raw.routine_id,
+        exercise_id: raw.exercise_id,
+        order_index: raw.order_index,
+        target_sets: raw.target_sets,
+        target_reps: raw.target_reps,
+        rest_seconds: raw.rest_seconds ?? 90,
+        time_per_rep_seconds: exercise?.time_per_rep_seconds ?? 3,
+        notes: raw.notes ?? null,
+    };
+}
+
+/** Writes the bundled starter catalogue. Existing rows are replaced. */
+export const seedDatabase = async (): Promise<void> => {
+    const now = new Date().toISOString();
+    await saveAll(
+        STORAGE_KEYS.EXERCISES,
+        SEED_EXERCISES.map((e) => normaliseSeedExercise(e, now))
+    );
+    await saveAll(
+        STORAGE_KEYS.ROUTINES,
+        SEED_ROUTINES.map((r) => ({ ...r, description: r.description ?? null, created_at: now, updated_at: now }))
+    );
+    await saveAll(STORAGE_KEYS.ROUTINE_EXERCISES, SEED_ROUTINE_EXERCISES.map(normaliseSeedRoutineExercise));
+};
+
+// =============================================================================
+// Migrations
+// =============================================================================
+
+/**
+ * Ordered, idempotent-by-version migrations. Bump `SCHEMA_VERSION` and append a
+ * step; everything below the stored version is skipped on later launches.
+ */
+const SCHEMA_VERSION = 2;
+
+const MIGRATIONS: Record<number, () => Promise<void>> = {
+    /**
+     * v1 — `routine_exercises.notes` used to hold `{"restTime":…,"timePerRep":…}`,
+     * which both destroyed the human-written coaching notes and made every
+     * consumer call `JSON.parse` on untrusted text. Promote them to real fields.
+     */
+    1: async () => {
+        const rows = await getAll<RoutineExercise & { notes: string | null }>(
+            STORAGE_KEYS.ROUTINE_EXERCISES
+        );
+        if (rows.length === 0) return;
+
+        const exercises = await storage.exercises.getAll();
+        const tempoById = new Map(exercises.map((e) => [e.id, e.time_per_rep_seconds]));
+        const restById = new Map(exercises.map((e) => [e.id, e.default_rest_seconds]));
+
+        const migrated = rows.map((row) => {
+            let restSeconds = row.rest_seconds;
+            let tempo = row.time_per_rep_seconds;
+            let notes = row.notes;
+
+            if (typeof notes === 'string' && notes.trim().startsWith('{')) {
+                try {
+                    const parsed = JSON.parse(notes) as {
+                        restTime?: number;
+                        timePerRep?: number;
+                        originalNotes?: string;
+                    };
+                    restSeconds = restSeconds ?? parsed.restTime;
+                    tempo = tempo ?? parsed.timePerRep;
+                    notes = parsed.originalNotes ?? null;
+                } catch {
+                    // Not the legacy JSON blob after all — keep it as free text.
+                }
+            }
+
+            return {
+                ...row,
+                rest_seconds: restSeconds ?? restById.get(row.exercise_id) ?? 90,
+                time_per_rep_seconds: tempo ?? tempoById.get(row.exercise_id) ?? 3,
+                notes: notes ?? null,
+            };
+        });
+
+        await saveAll(STORAGE_KEYS.ROUTINE_EXERCISES, migrated);
+    },
+
+    /**
+     * v2 — normalise loosely-typed persisted values: `is_warmup` was written as
+     * 0/1 by one code path and as a boolean by another, and weights round-tripped
+     * as strings. Also fills in exercise defaults that predate those columns.
+     */
+    2: async () => {
+        const logs = await getAll<Omit<WorkoutLog, 'is_warmup'> & { is_warmup: unknown }>(
+            STORAGE_KEYS.WORKOUT_LOGS
+        );
+        if (logs.length > 0) {
+            await saveAll(
+                STORAGE_KEYS.WORKOUT_LOGS,
+                logs.map((log) => ({
+                    ...log,
+                    weight_kg: Number(log.weight_kg) || 0,
+                    reps: Number(log.reps) || 0,
+                    rpe: log.rpe == null ? null : Number(log.rpe),
+                    is_warmup: log.is_warmup === true || log.is_warmup === 1 || log.is_warmup === '1',
+                }))
+            );
+        }
+
+        const exercises = await getAll<Partial<Exercise> & { id: string }>(STORAGE_KEYS.EXERCISES);
+        if (exercises.length > 0) {
+            await saveAll(
+                STORAGE_KEYS.EXERCISES,
+                exercises.map((exercise) => {
+                    const tempo = exercise.time_per_rep_seconds || 3;
+                    return {
+                        ...exercise,
+                        equipment: exercise.equipment ?? '',
+                        notes: exercise.notes ?? null,
+                        created_at: exercise.created_at ?? new Date().toISOString(),
+                        time_per_rep_seconds: tempo,
+                        default_rest_seconds:
+                            exercise.default_rest_seconds || DEFAULT_REST_BY_TEMPO[tempo] || 90,
+                    } as Exercise;
+                })
+            );
+        }
+
+        // One body-weight entry per day; keep the last one written.
+        const weights = await getAll<WeightLog>(STORAGE_KEYS.BODY_WEIGHT);
+        const byDate = new Map<string, WeightLog>();
+        weights.forEach((log) => byDate.set(log.date, log));
+        if (byDate.size !== weights.length) {
+            await saveAll(STORAGE_KEYS.BODY_WEIGHT, Array.from(byDate.values()));
+        }
+    },
+};
+
+async function runMigrations(): Promise<void> {
+    const stored = await AsyncStorage.getItem(SCHEMA_VERSION_KEY);
+    const current = stored ? Number(stored) || 0 : 0;
+    if (current >= SCHEMA_VERSION) return;
+
+    for (let version = current + 1; version <= SCHEMA_VERSION; version++) {
+        const migration = MIGRATIONS[version];
+        if (!migration) continue;
+        try {
+            await migration();
+        } catch (error) {
+            // A failed migration must not brick the app; stop and retry next launch.
+            console.error(`[db] migration v${version} failed:`, error);
+            await AsyncStorage.setItem(SCHEMA_VERSION_KEY, String(version - 1));
+            return;
+        }
+    }
+
+    await AsyncStorage.setItem(SCHEMA_VERSION_KEY, String(SCHEMA_VERSION));
+}
+
+/**
+ * Seeds a fresh install and brings existing data up to the current schema.
+ * Callers must await this before rendering anything that reads the database.
+ */
+export const initializeDatabase = async (): Promise<void> => {
+    try {
+        const [exercises, routines] = await Promise.all([
+            storage.exercises.getAll(),
+            storage.routines.getAll(),
+        ]);
+
+        const isFreshInstall = exercises.length === 0 && routines.length === 0;
+        if (isFreshInstall) {
+            await seedDatabase();
+            // Freshly seeded data is already in the current shape.
+            await AsyncStorage.setItem(SCHEMA_VERSION_KEY, String(SCHEMA_VERSION));
+            return;
+        }
+
+        await runMigrations();
+    } catch (error) {
+        console.error('[db] initialisation failed:', error);
+        throw error;
+    }
+};
+
+/** Wipes every table. Used by the danger zone in Settings. */
+export const clearAllData = async (): Promise<void> => {
+    await AsyncStorage.multiRemove([...Object.values(STORAGE_KEYS), SCHEMA_VERSION_KEY]);
+    cache.clear();
 };

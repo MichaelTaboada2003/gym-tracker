@@ -1,24 +1,23 @@
 import React from 'react';
-import { View, Text, StyleSheet, Modal, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Modal, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, getMuscleColor } from '../../constants/colors';
 import { ExerciseInProgress } from '../../store/workoutStore';
+import { PersonalRecord } from '../../hooks/useWorkoutSession';
+import { formatMinutes, formatVolumeShort, formatWeight } from '../../lib/utils';
 import { Button } from '../ui/Button';
 
 export interface WorkoutSummaryData {
     routineName: string | null;
-    duration: number; // in minutes
+    /** Minutes. */
+    duration: number;
     exercises: ExerciseInProgress[];
     totalVolume: number;
     totalSets: number;
     totalReps: number;
-    personalRecords: {
-        exerciseName: string;
-        weight: number;
-        reps: number;
-        improvement: string;
-    }[];
+    personalRecords: PersonalRecord[];
 }
 
 interface WorkoutSummaryModalProps {
@@ -27,37 +26,8 @@ interface WorkoutSummaryModalProps {
     onClose: () => void;
 }
 
-// Format duration
-const formatDuration = (minutes: number): string => {
-    if (minutes < 60) {
-        return `${minutes} min`;
-    }
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
-};
-
-// Format large numbers
-const formatNumber = (num: number): string => {
-    if (num >= 1000) {
-        return `${(num / 1000).toFixed(1)}k`;
-    }
-    return num.toFixed(0);
-};
-
-// Muscle group colors
-const MUSCLE_COLORS: Record<string, string> = {
-    'Pecho': '#EF4444',
-    'Espalda': '#3B82F6',
-    'Hombros': '#F59E0B',
-    'Bíceps': '#8B5CF6',
-    'Tríceps': '#A855F7',
-    'Piernas': '#10B981',
-    'Core': '#EC4899',
-    'Cardio': '#06B6D4',
-};
-
 export function WorkoutSummaryModal({ visible, data, onClose }: WorkoutSummaryModalProps) {
+    const insets = useSafeAreaInsets();
     if (!data) return null;
 
     // Calculate muscle groups worked
@@ -90,11 +60,8 @@ export function WorkoutSummaryModal({ visible, data, onClose }: WorkoutSummaryMo
             onRequestClose={onClose}
         >
             <View style={styles.container}>
-                {/* Confetti effect (only on mobile) */}
-                {/* <Confetti count={100} origin={{ x: -10, y: 0 }} fadeOut /> */}
-
                 <ScrollView
-                    contentContainerStyle={styles.content}
+                    contentContainerStyle={[styles.content, { paddingTop: insets.top + SPACING.lg }]}
                     showsVerticalScrollIndicator={false}
                 >
                     {/* Success Icon */}
@@ -120,7 +87,7 @@ export function WorkoutSummaryModal({ visible, data, onClose }: WorkoutSummaryMo
                             style={styles.mainStatCard}
                         >
                             <Ionicons name="time" size={24} color={COLORS.primary} />
-                            <Text style={styles.mainStatValue}>{formatDuration(data.duration)}</Text>
+                            <Text style={styles.mainStatValue}>{formatMinutes(data.duration)}</Text>
                             <Text style={styles.mainStatLabel}>Duración</Text>
                         </LinearGradient>
 
@@ -129,7 +96,7 @@ export function WorkoutSummaryModal({ visible, data, onClose }: WorkoutSummaryMo
                             style={styles.mainStatCard}
                         >
                             <Ionicons name="barbell" size={24} color={COLORS.success} />
-                            <Text style={styles.mainStatValue}>{formatNumber(data.totalVolume)}</Text>
+                            <Text style={styles.mainStatValue}>{formatVolumeShort(data.totalVolume)}</Text>
                             <Text style={styles.mainStatLabel}>Volumen (kg)</Text>
                         </LinearGradient>
                     </View>
@@ -180,18 +147,18 @@ export function WorkoutSummaryModal({ visible, data, onClose }: WorkoutSummaryMo
                                     key={group}
                                     style={[
                                         styles.muscleGroupPill,
-                                        { backgroundColor: (MUSCLE_COLORS[group] || COLORS.primary) + '20' }
+                                        { backgroundColor: getMuscleColor(group) + '20' }
                                     ]}
                                 >
                                     <View
                                         style={[
                                             styles.muscleGroupDot,
-                                            { backgroundColor: MUSCLE_COLORS[group] || COLORS.primary }
+                                            { backgroundColor: getMuscleColor(group) }
                                         ]}
                                     />
                                     <Text style={[
                                         styles.muscleGroupText,
-                                        { color: MUSCLE_COLORS[group] || COLORS.primary }
+                                        { color: getMuscleColor(group) }
                                     ]}>
                                         {group}
                                     </Text>
@@ -207,15 +174,16 @@ export function WorkoutSummaryModal({ visible, data, onClose }: WorkoutSummaryMo
                                 <Ionicons name="trophy" size={20} color={COLORS.warning} />
                                 <Text style={styles.sectionTitle}>Récords Personales</Text>
                             </View>
-                            {data.personalRecords.map((pr, index) => (
-                                <View key={index} style={styles.prCard}>
+                            {data.personalRecords.map((pr) => (
+                                <View key={pr.exerciseId} style={styles.prCard}>
                                     <View style={styles.prIcon}>
                                         <Ionicons name="medal" size={20} color={COLORS.warning} />
                                     </View>
                                     <View style={styles.prContent}>
                                         <Text style={styles.prExercise}>{pr.exerciseName}</Text>
                                         <Text style={styles.prValue}>
-                                            {pr.weight}kg × {pr.reps} reps
+                                            {formatWeight(pr.weight)}kg × {pr.reps} reps ·{' '}
+                                            {Math.round(pr.estimated1RM)}kg 1RM
                                         </Text>
                                     </View>
                                     <View style={styles.prImprovement}>
@@ -235,16 +203,16 @@ export function WorkoutSummaryModal({ visible, data, onClose }: WorkoutSummaryMo
                                 <View key={index} style={styles.exerciseRow}>
                                     <View style={[
                                         styles.exerciseColorBar,
-                                        { backgroundColor: MUSCLE_COLORS[ex.muscleGroup] || COLORS.primary }
+                                        { backgroundColor: getMuscleColor(ex.muscleGroup) }
                                     ]} />
                                     <View style={styles.exerciseInfo}>
                                         <Text style={styles.exerciseRowName}>{ex.name}</Text>
                                         <Text style={styles.exerciseRowDetails}>
-                                            {ex.sets} series • {ex.totalReps} reps • {ex.maxWeight}kg max
+                                            {ex.sets} series · {ex.totalReps} reps · {formatWeight(ex.maxWeight)}kg máx
                                         </Text>
                                     </View>
                                     <Text style={styles.exerciseVolume}>
-                                        {formatNumber(ex.volume)} kg
+                                        {formatVolumeShort(ex.volume)} kg
                                     </Text>
                                 </View>
                             ))}
@@ -253,7 +221,7 @@ export function WorkoutSummaryModal({ visible, data, onClose }: WorkoutSummaryMo
                 </ScrollView>
 
                 {/* Action Button */}
-                <View style={styles.actionContainer}>
+                <View style={[styles.actionContainer, { paddingBottom: Math.max(insets.bottom, SPACING.lg) }]}>
                     <Button
                         title="Listo"
                         onPress={onClose}
@@ -275,8 +243,7 @@ const styles = StyleSheet.create({
     },
     content: {
         padding: SPACING.lg,
-        paddingTop: 60,
-        paddingBottom: 120,
+        paddingBottom: 140,
     },
     successIconContainer: {
         alignItems: 'center',
@@ -497,7 +464,6 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         padding: SPACING.lg,
-        paddingBottom: 40,
         backgroundColor: COLORS.background,
         borderTopWidth: 1,
         borderTopColor: COLORS.surfaceHighlight,

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, ScrollView, Alert } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -7,6 +7,7 @@ import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colo
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { useBodyWeight, DateRange } from '../../hooks/useBodyWeight';
+import { parseISODate } from '../../lib/utils';
 
 const DATE_RANGE_OPTIONS: { key: DateRange; label: string }[] = [
     { key: '7d', label: '7D' },
@@ -18,7 +19,15 @@ const DATE_RANGE_OPTIONS: { key: DateRange; label: string }[] = [
 ];
 
 export const BodyWeightWidget = () => {
-    const { weightLogs, currentWeight, addWeightLog, getLogsForRange, getStatsForRange, fetchWeightLogs } = useBodyWeight();
+    const {
+        weightLogs,
+        currentWeight,
+        addWeightLog,
+        deleteWeightLog,
+        getLogsForRange,
+        getStatsForRange,
+        fetchWeightLogs,
+    } = useBodyWeight();
     const [isModalVisible, setIsModalVisible] = useState(false);
     const [isDetailModalVisible, setIsDetailModalVisible] = useState(false);
     const [newWeight, setNewWeight] = useState('');
@@ -30,8 +39,8 @@ export const BodyWeightWidget = () => {
         const logs = getLogsForRange('7d');
         return [...logs]
             .reverse() // Chronological order (oldest first)
-            .map((log, index, arr) => {
-                const date = new Date(log.date);
+            .map((log) => {
+                const date = parseISODate(log.date);
                 return {
                     value: log.weight_kg,
                     label: `${date.getDate()}/${date.getMonth() + 1}`,
@@ -46,7 +55,7 @@ export const BodyWeightWidget = () => {
         return [...logs]
             .reverse()
             .map((log) => {
-                const date = new Date(log.date);
+                const date = parseISODate(log.date);
                 const isMonthStart = date.getDate() === 1 || logs.length <= 10;
                 return {
                     value: log.weight_kg,
@@ -62,15 +71,27 @@ export const BodyWeightWidget = () => {
     const detailStats = useMemo(() => getStatsForRange(detailRange), [getStatsForRange, detailRange]);
 
     const handleAddWeight = async () => {
-        if (!newWeight) return;
         const weight = parseFloat(newWeight.replace(',', '.'));
-        if (isNaN(weight) || weight <= 0 || weight > 500) return;
-
-        const success = await addWeightLog(weight);
-        if (success) {
-            setNewWeight('');
-            setIsModalVisible(false);
+        if (!Number.isFinite(weight) || weight <= 0 || weight > 500) {
+            Alert.alert('Peso no válido', 'Introduce un peso entre 1 y 500 kg.');
+            return;
         }
+
+        const saved = await addWeightLog(weight);
+        if (!saved) {
+            Alert.alert('Error', 'No se pudo guardar el peso.');
+            return;
+        }
+        setNewWeight('');
+        setIsModalVisible(false);
+    };
+
+    /** Long-press on a history row: the only way to correct a mistyped entry. */
+    const confirmDelete = (id: string, label: string) => {
+        Alert.alert('Eliminar registro', `¿Borrar el peso de ${label}?`, [
+            { text: 'Cancelar', style: 'cancel' },
+            { text: 'Eliminar', style: 'destructive', onPress: () => deleteWeightLog(id) },
+        ]);
     };
 
     const formatChange = (change: number) => {
@@ -334,20 +355,27 @@ export const BodyWeightWidget = () => {
                         </View>
 
                         {/* Weight History List */}
-                        <Text style={styles.historyTitle}>Registros Recientes</Text>
+                        <Text style={styles.historyTitle}>
+                            Registros recientes <Text style={styles.historyHint}>· mantén pulsado para borrar</Text>
+                        </Text>
                         <ScrollView style={styles.historyList} showsVerticalScrollIndicator={false}>
                             {getLogsForRange(detailRange).slice(0, 10).map((log, index) => {
-                                const date = new Date(log.date);
+                                const date = parseISODate(log.date);
                                 const dateStr = date.toLocaleDateString('es-ES', {
                                     weekday: 'short',
                                     day: 'numeric',
                                     month: 'short'
                                 });
                                 return (
-                                    <View key={log.id} style={styles.historyItem}>
+                                    <TouchableOpacity
+                                        key={log.id}
+                                        style={styles.historyItem}
+                                        onLongPress={() => confirmDelete(log.id, dateStr)}
+                                        accessibilityLabel={`${dateStr}: ${log.weight_kg} kg. Mantén pulsado para eliminar.`}
+                                    >
                                         <Text style={styles.historyDate}>{dateStr}</Text>
                                         <Text style={styles.historyWeight}>{log.weight_kg.toFixed(1)} kg</Text>
-                                    </View>
+                                    </TouchableOpacity>
                                 );
                             })}
                             {getLogsForRange(detailRange).length === 0 && (
@@ -602,6 +630,11 @@ const styles = StyleSheet.create({
         color: COLORS.textMuted,
         marginTop: SPACING.xs,
         textAlign: 'center',
+    },
+    historyHint: {
+        fontSize: 10,
+        fontWeight: '400',
+        color: COLORS.textMuted,
     },
     historyTitle: {
         fontSize: FONT_SIZES.md,

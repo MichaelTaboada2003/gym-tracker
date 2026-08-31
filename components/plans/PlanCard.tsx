@@ -15,6 +15,8 @@ interface PlanCardProps {
         }>;
     };
     onPress: () => void;
+    /** Long-press opens the plan's action menu (edit / delete). */
+    onLongPress?: () => void;
 }
 
 // Color schemes for plans
@@ -26,7 +28,7 @@ const PLAN_GRADIENTS: [string, string][] = [
     ['#EC4899', '#DB2777'], // Pink
 ];
 
-export function PlanCard({ plan, onPress }: PlanCardProps) {
+export function PlanCard({ plan, onPress, onLongPress }: PlanCardProps) {
     // Get gradient based on plan name hash for consistency
     const gradientIndex = plan.name.length % PLAN_GRADIENTS.length;
     const gradient = PLAN_GRADIENTS[gradientIndex];
@@ -40,7 +42,12 @@ export function PlanCard({ plan, onPress }: PlanCardProps) {
     const routineNames = plan.items?.slice(0, 2).map(item => item.routine?.name).filter(Boolean) || [];
 
     return (
-        <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.8}>
+        <TouchableOpacity
+            style={styles.container}
+            onPress={onPress}
+            onLongPress={onLongPress}
+            activeOpacity={0.8}
+        >
             <LinearGradient
                 colors={[gradient[0] + '15', 'transparent']}
                 start={{ x: 0, y: 0 }}

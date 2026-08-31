@@ -1,18 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
-import { usePlans, PlanWithRoutines } from '../../hooks/usePlans';
+import { usePlans, PlanWithRoutines, PlanDayInput } from '../../hooks/usePlans';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../components/ui/Button';
+import { formatMinutes } from '../../lib/utils';
 import { CreatePlanModal } from '../../components/plans/CreatePlanModal';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// Day of week names for visual display
-const DAY_NAMES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
 // Color palette for days
 const DAY_COLORS = [
@@ -46,15 +42,25 @@ export default function PlanDetailsScreen() {
         setLoading(false);
     };
 
-    const handleUpdatePlan = async (planId: string, name: string, description: string | null, durationDays: number, routines: any[]) => {
-        if (!plan) return;
-        await updatePlan(planId, name, description, durationDays, routines);
+    const handleUpdatePlan = async (
+        planId: string,
+        name: string,
+        description: string | null,
+        durationDays: number,
+        days: PlanDayInput[]
+    ) => {
+        await updatePlan(planId, name, description, durationDays, days);
         await loadPlan();
         setIsEditModalVisible(false);
     };
 
     const handleViewRoutine = (routineId: string) => {
         router.push(`/routine/${routineId}`);
+    };
+
+    /** Launches the workout tab straight into this routine. */
+    const handleStartRoutine = (routineId: string) => {
+        router.navigate(`/workout?routineId=${routineId}`);
     };
 
     // Calculate total stats
@@ -170,33 +176,36 @@ export default function PlanDetailsScreen() {
                     </View>
                 </LinearGradient>
 
-                {/* Weekly Overview */}
-                {plan.items.length > 0 && plan.items.length <= 7 && (
+                {/* Day overview. Plan days are cycle positions ("Día 1…N"), not
+                    weekdays — labelling them Lun/Mar implied a fixed calendar. */}
+                {plan.items.length > 0 && (
                     <View style={styles.weekOverview}>
-                        <Text style={styles.sectionTitle}>Vista Semanal</Text>
+                        <Text style={styles.sectionTitle}>Estructura</Text>
                         <View style={styles.weekGrid}>
-                            {DAY_NAMES.map((day, index) => {
-                                const hasRoutine = plan.items.some(item => item.day_number === index + 1);
-                                const routineItem = plan.items.find(item => item.day_number === index + 1);
+                            {Array.from({ length: stats.totalDays }, (_, index) => {
+                                const dayNumber = index + 1;
+                                const item = plan.items.find((entry) => entry.day_number === dayNumber);
 
                                 return (
                                     <TouchableOpacity
-                                        key={day}
-                                        style={[
-                                            styles.weekDay,
-                                            hasRoutine && styles.weekDayActive
-                                        ]}
-                                        onPress={() => routineItem && handleViewRoutine(routineItem.routine_id)}
-                                        disabled={!hasRoutine}
+                                        key={dayNumber}
+                                        style={[styles.weekDay, item && styles.weekDayActive]}
+                                        onPress={() => item && handleViewRoutine(item.routine_id)}
+                                        disabled={!item}
+                                        accessibilityLabel={
+                                            item ? `Día ${dayNumber}: ${item.routine.name}` : `Día ${dayNumber}: descanso`
+                                        }
                                     >
-                                        <Text style={[
-                                            styles.weekDayName,
-                                            hasRoutine && styles.weekDayNameActive
-                                        ]}>
-                                            {day}
+                                        <Text style={[styles.weekDayName, item && styles.weekDayNameActive]}>
+                                            {dayNumber}
                                         </Text>
-                                        {hasRoutine ? (
-                                            <View style={[styles.weekDayDot, { backgroundColor: DAY_COLORS[index % DAY_COLORS.length] }]} />
+                                        {item ? (
+                                            <View
+                                                style={[
+                                                    styles.weekDayDot,
+                                                    { backgroundColor: DAY_COLORS[index % DAY_COLORS.length] },
+                                                ]}
+                                            />
                                         ) : (
                                             <Text style={styles.weekDayOff}>—</Text>
                                         )}
@@ -217,9 +226,9 @@ export default function PlanDetailsScreen() {
                     </View>
 
                     <View style={styles.routinesList}>
-                        {plan.items.map((item: any, index: number) => {
+                        {plan.items.map((item, index) => {
                             const color = DAY_COLORS[index % DAY_COLORS.length];
-                            const exerciseCount = item.routine?.routine_exercises?.length || 0;
+                            const routineMinutes = item.routine.estimated_duration;
 
                             return (
                                 <TouchableOpacity
@@ -239,24 +248,15 @@ export default function PlanDetailsScreen() {
 
                                     {/* Routine info */}
                                     <View style={styles.routineInfo}>
-                                        <Text style={styles.routineName}>{item.routine?.name || 'Rutina'}</Text>
+                                        <Text style={styles.routineName}>{item.routine.name}</Text>
 
                                         <View style={styles.routineMetaRow}>
                                             <View style={styles.routineMeta}>
                                                 <Ionicons name="time-outline" size={13} color={COLORS.textMuted} />
                                                 <Text style={styles.routineMetaText}>
-                                                    {item.routine?.estimated_duration || 0} min
+                                                    {formatMinutes(routineMinutes)}
                                                 </Text>
                                             </View>
-
-                                            {exerciseCount > 0 && (
-                                                <View style={styles.routineMeta}>
-                                                    <Ionicons name="barbell-outline" size={13} color={COLORS.textMuted} />
-                                                    <Text style={styles.routineMetaText}>
-                                                        {exerciseCount} ejercicios
-                                                    </Text>
-                                                </View>
-                                            )}
                                         </View>
 
                                         {item.notes && (
@@ -267,47 +267,19 @@ export default function PlanDetailsScreen() {
                                         )}
                                     </View>
 
-                                    {/* Action indicator */}
-                                    <View style={styles.routineAction}>
-                                        <View style={[styles.playButton, { backgroundColor: color + '20' }]}>
-                                            <Ionicons name="chevron-forward" size={18} color={color} />
-                                        </View>
-                                    </View>
+                                    <TouchableOpacity
+                                        style={[styles.playButton, { backgroundColor: color }]}
+                                        onPress={() => handleStartRoutine(item.routine_id)}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={`Empezar ${item.routine.name}`}
+                                    >
+                                        <Ionicons name="play" size={16} color="#FFF" />
+                                    </TouchableOpacity>
                                 </TouchableOpacity>
                             );
                         })}
                     </View>
                 </View>
-
-                {/* Timeline visualization */}
-                {plan.items.length > 1 && (
-                    <View style={styles.timelineSection}>
-                        <Text style={styles.sectionTitle}>Línea de Tiempo</Text>
-                        <View style={styles.timeline}>
-                            {plan.items.map((item: any, index: number) => {
-                                const color = DAY_COLORS[index % DAY_COLORS.length];
-                                const isLast = index === plan.items.length - 1;
-
-                                return (
-                                    <View key={item.id} style={styles.timelineItem}>
-                                        <View style={styles.timelineLeft}>
-                                            <View style={[styles.timelineDot, { backgroundColor: color }]}>
-                                                <Text style={styles.timelineDotText}>{item.day_number}</Text>
-                                            </View>
-                                            {!isLast && <View style={styles.timelineLine} />}
-                                        </View>
-                                        <View style={styles.timelineContent}>
-                                            <Text style={styles.timelineTitle}>{item.routine?.name}</Text>
-                                            <Text style={styles.timelineSubtitle}>
-                                                {item.routine?.estimated_duration} min • Día {item.day_number}
-                                            </Text>
-                                        </View>
-                                    </View>
-                                );
-                            })}
-                        </View>
-                    </View>
-                )}
 
                 {/* Empty state for no routines */}
                 {plan.items.length === 0 && (
@@ -330,7 +302,7 @@ export default function PlanDetailsScreen() {
             <CreatePlanModal
                 visible={isEditModalVisible}
                 onClose={() => setIsEditModalVisible(false)}
-                onUpdate={handleUpdatePlan as any}
+                onUpdate={handleUpdatePlan}
                 initialData={plan}
             />
         </SafeAreaView>
@@ -595,9 +567,6 @@ const styles = StyleSheet.create({
         fontSize: 11,
         color: COLORS.info,
     },
-    routineAction: {
-        marginLeft: SPACING.sm,
-    },
     playButton: {
         width: 36,
         height: 36,
@@ -606,51 +575,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     // Timeline
-    timelineSection: {
-        marginBottom: SPACING.xl,
-    },
-    timeline: {
-        paddingLeft: SPACING.xs,
-    },
-    timelineItem: {
-        flexDirection: 'row',
-    },
-    timelineLeft: {
-        alignItems: 'center',
-        width: 40,
-    },
-    timelineDot: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    timelineDotText: {
-        fontSize: 11,
-        fontWeight: '700',
-        color: '#FFF',
-    },
-    timelineLine: {
-        width: 2,
-        height: 40,
-        backgroundColor: COLORS.surfaceHighlight,
-        marginVertical: 4,
-    },
-    timelineContent: {
-        flex: 1,
-        paddingBottom: SPACING.lg,
-        marginLeft: SPACING.sm,
-    },
-    timelineTitle: {
-        fontSize: FONT_SIZES.sm,
-        fontWeight: '600',
-        color: COLORS.textPrimary,
-    },
-    timelineSubtitle: {
-        fontSize: 12,
-        color: COLORS.textMuted,
-    },
     // Empty State
     emptyState: {
         alignItems: 'center',

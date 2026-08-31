@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     Modal,
     View,
@@ -8,410 +8,530 @@ import {
     TouchableOpacity,
     TextInput,
     Alert,
+    KeyboardAvoidingView,
+    Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, getMuscleColor, HIT_SIZE } from '../../constants/colors';
 import { Button } from '../ui/Button';
-import { IconButton } from '../ui/IconButton';
-import { RoutineWithExercises } from '../../hooks/useRoutines';
+import { EmptyState } from '../ui/EmptyState';
+import { RoutineWithExercises, RoutineExerciseInput } from '../../hooks/useRoutines';
 import { useExercises } from '../../hooks/useExercises';
 import { Exercise } from '../../lib/database.types';
+import { estimateRoutineMinutes, getDurationColor, getDurationLabel } from '../../lib/durationCalculator';
+import { formatSeconds, parseTargetReps } from '../../lib/utils';
 
-const REST_TIME_OPTIONS = [30, 45, 60, 75, 90, 105, 120, 150, 180]; // seconds (30s to 3min)
-const TIME_PER_REP_OPTIONS = [2, 3, 4, 5]; // seconds per rep
+const REST_TIME_OPTIONS = [30, 45, 60, 75, 90, 105, 120, 150, 180];
+const TIME_PER_REP_OPTIONS = [2, 3, 4, 5];
+const TEMPO_HINTS: Record<number, string> = {
+    2: 'Rápido',
+    3: 'Normal',
+    4: 'Controlado',
+    5: 'Lento',
+};
 
-export interface SelectedExercise extends Exercise {
+/** One exercise while the routine is being built. */
+interface DraftExercise {
+    exercise: Exercise;
     sets: number;
-    reps: number;
-    restTime: number; // in seconds
-    timePerRep: number; // seconds per repetition
+    /** Free text so ranges like "8-10" survive a round trip. */
+    reps: string;
+    restTime: number;
+    timePerRep: number;
+    notes: string;
 }
 
 interface CreateRoutineModalProps {
     visible: boolean;
     onClose: () => void;
-    onCreate?: (name: string, description: string, exercises: SelectedExercise[]) => Promise<void>;
-    onUpdate?: (id: string, name: string, description: string, exercises: SelectedExercise[]) => Promise<void>;
+    onCreate?: (name: string, description: string | null, exercises: RoutineExerciseInput[]) => Promise<unknown>;
+    onUpdate?: (
+        id: string,
+        name: string,
+        description: string | null,
+        exercises: RoutineExerciseInput[]
+    ) => Promise<unknown>;
     initialData?: RoutineWithExercises | null;
 }
 
 export function CreateRoutineModal({ visible, onClose, onCreate, onUpdate, initialData }: CreateRoutineModalProps) {
-    const { exercises: availableExercises } = useExercises();
+    const insets = useSafeAreaInsets();
+    const { exercises: catalogue } = useExercises();
 
-    // Form State
     const [step, setStep] = useState<1 | 2 | 3>(1);
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
-    const [selectedExercises, setSelectedExercises] = useState<SelectedExercise[]>([]);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [loading, setLoading] = useState(false);
+    const [drafts, setDrafts] = useState<DraftExercise[]>([]);
+    const [query, setQuery] = useState('');
+    const [saving, setSaving] = useState(false);
 
+    const reset = () => {
+        setStep(1);
+        setName('');
+        setDescription('');
+        setDrafts([]);
+        setQuery('');
+    };
+
+    /**
+     * Rehydrates the builder when editing.
+     *
+     * Rest and tempo are read from their own columns — the old version called
+     * `JSON.parse(re.notes)` unguarded, which threw on any routine whose notes
+     * were plain coaching text and made those routines impossible to edit.
+     */
     useEffect(() => {
-        if (visible && initialData) {
-            setName(initialData.name);
-            setDescription(initialData.description || '');
+        if (!visible) return;
 
-            const exercises: SelectedExercise[] = initialData.routine_exercises.map(re => {
-                // Parse reps - handle strings like "10", "8-10", etc.
-                let repsNum = 5;
-                if (re.target_reps) {
-                    const parsed = parseInt(re.target_reps.toString().split('-')[0], 10);
-                    if (!isNaN(parsed)) repsNum = parsed;
-                }
+        if (!initialData) {
+            reset();
+            return;
+        }
 
-                return {
-                    id: re.exercise_id,
-                    name: re.exercise.name,
-                    muscle_group: re.exercise.muscle_group,
-                    equipment: re.exercise.equipment || '',
+        setStep(1);
+        setQuery('');
+        setName(initialData.name);
+        setDescription(initialData.description ?? '');
+        setDrafts(
+            initialData.routine_exercises.map((slot) => ({
+                exercise: {
+                    id: slot.exercise_id,
+                    name: slot.exercise.name,
+                    muscle_group: slot.exercise.muscle_group,
+                    equipment: slot.exercise.equipment,
                     notes: null,
                     created_at: '',
-                    time_per_rep_seconds: re.exercise.time_per_rep_seconds || 3,
-                    default_rest_seconds: re.exercise.default_rest_seconds || 90,
-
-                    sets: re.target_sets,
-                    reps: repsNum,
-                    restTime: re.notes ? (JSON.parse(re.notes).restTime || 90) : 90,
-                    timePerRep: re.notes ? (JSON.parse(re.notes).timePerRep || re.exercise.time_per_rep_seconds || 3) : (re.exercise.time_per_rep_seconds || 3)
-                };
-            });
-
-            setSelectedExercises(exercises);
-        } else if (visible && !initialData) {
-            resetForm();
-        }
+                    time_per_rep_seconds: slot.exercise.time_per_rep_seconds,
+                    default_rest_seconds: slot.exercise.default_rest_seconds,
+                },
+                sets: slot.target_sets,
+                reps: slot.target_reps,
+                restTime: slot.rest_seconds,
+                timePerRep: slot.time_per_rep_seconds,
+                notes: slot.notes ?? '',
+            }))
+        );
     }, [visible, initialData]);
 
-    const handleNext = () => {
+    const filtered = useMemo(() => {
+        const needle = query.trim().toLowerCase();
+        if (!needle) return catalogue;
+        return catalogue.filter(
+            (e) => e.name.toLowerCase().includes(needle) || e.muscle_group.toLowerCase().includes(needle)
+        );
+    }, [catalogue, query]);
+
+    /** Live estimate, using exactly the same maths the saved routine will use. */
+    const estimatedMinutes = useMemo(
+        () =>
+            estimateRoutineMinutes(
+                drafts.map((d) => ({
+                    sets: d.sets,
+                    reps: parseTargetReps(d.reps),
+                    timePerRepSeconds: d.timePerRep,
+                    restBetweenSetsSeconds: d.restTime,
+                }))
+            ),
+        [drafts]
+    );
+
+    const toggleExercise = (exercise: Exercise) => {
+        setDrafts((prev) =>
+            prev.some((d) => d.exercise.id === exercise.id)
+                ? prev.filter((d) => d.exercise.id !== exercise.id)
+                : [
+                      ...prev,
+                      {
+                          exercise,
+                          sets: 3,
+                          reps: '10',
+                          restTime: exercise.default_rest_seconds || 90,
+                          timePerRep: exercise.time_per_rep_seconds || 3,
+                          notes: '',
+                      },
+                  ]
+        );
+    };
+
+    const patchDraft = (id: string, updates: Partial<DraftExercise>) =>
+        setDrafts((prev) => prev.map((d) => (d.exercise.id === id ? { ...d, ...updates } : d)));
+
+    const moveDraft = (index: number, direction: -1 | 1) =>
+        setDrafts((prev) => {
+            const target = index + direction;
+            if (target < 0 || target >= prev.length) return prev;
+            const next = [...prev];
+            [next[index], next[target]] = [next[target], next[index]];
+            return next;
+        });
+
+    const goNext = () => {
         if (step === 1) {
             if (!name.trim()) {
-                Alert.alert('Error', 'Por favor ingresa un nombre para la rutina');
+                Alert.alert('Falta el nombre', 'Ponle un nombre a la rutina para poder guardarla.');
                 return;
             }
             setStep(2);
         } else if (step === 2) {
-            if (selectedExercises.length === 0) {
-                Alert.alert('Error', 'Selecciona al menos un ejercicio');
+            if (drafts.length === 0) {
+                Alert.alert('Sin ejercicios', 'Selecciona al menos un ejercicio.');
                 return;
             }
             setStep(3);
         }
     };
 
-    const handleBack = () => {
-        if (step === 2) setStep(1);
-        if (step === 3) setStep(2);
-    };
-
-    const toggleExercise = (exercise: Exercise) => {
-        const exists = selectedExercises.find(e => e.id === exercise.id);
-        if (exists) {
-            setSelectedExercises(prev => prev.filter(e => e.id !== exercise.id));
-        } else {
-            setSelectedExercises(prev => [
-                ...prev,
-                {
-                    ...exercise,
-                    sets: 3,
-                    reps: 5,
-                    restTime: exercise.default_rest_seconds || 90,
-                    timePerRep: exercise.time_per_rep_seconds || 3
-                }
-            ]);
-        }
-    };
-
-    const updateExercise = (id: string, updates: Partial<SelectedExercise>) => {
-        setSelectedExercises(prev =>
-            prev.map(ex => (ex.id === id ? { ...ex, ...updates } : ex))
-        );
-    };
-
     const handleSave = async () => {
+        const payload: RoutineExerciseInput[] = drafts.map((d) => ({
+            id: d.exercise.id,
+            sets: d.sets,
+            reps: d.reps.trim() || '10',
+            restTime: d.restTime,
+            timePerRep: d.timePerRep,
+            notes: d.notes.trim() || null,
+        }));
+
         try {
-            setLoading(true);
+            setSaving(true);
             if (initialData && onUpdate) {
-                await onUpdate(initialData.id, name, description, selectedExercises);
+                await onUpdate(initialData.id, name, description || null, payload);
             } else if (onCreate) {
-                await onCreate(name, description, selectedExercises);
+                await onCreate(name, description || null, payload);
             }
-            resetForm();
+            reset();
             onClose();
         } catch (error) {
-            Alert.alert('Error', 'No se pudo guardar la rutina');
+            console.error('[routine-builder] save failed:', error);
+            Alert.alert('Error', 'No se pudo guardar la rutina.');
         } finally {
-            setLoading(false);
+            setSaving(false);
         }
     };
 
-    const resetForm = () => {
-        setStep(1);
-        setName('');
-        setDescription('');
-        setSelectedExercises([]);
-        setSearchQuery('');
-    };
-
-    const filteredExercises = availableExercises.filter(ex =>
-        ex.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        ex.muscle_group.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    const formatRestTime = (seconds: number) => {
-        return seconds >= 60 ? `${seconds / 60} min` : `${seconds}s`;
+    const requestClose = () => {
+        const dirty = name.trim().length > 0 || drafts.length > 0;
+        if (!dirty) {
+            onClose();
+            return;
+        }
+        Alert.alert('Descartar cambios', 'Perderás lo que has configurado en esta rutina.', [
+            { text: 'Seguir editando', style: 'cancel' },
+            {
+                text: 'Descartar',
+                style: 'destructive',
+                onPress: () => {
+                    reset();
+                    onClose();
+                },
+            },
+        ]);
     };
 
     return (
-        <Modal
-            visible={visible}
-            animationType="slide"
-            presentationStyle="pageSheet"
-            onRequestClose={onClose}
-        >
-            <View style={styles.container}>
-                {/* Header */}
+        <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={requestClose}>
+            <KeyboardAvoidingView
+                style={styles.container}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            >
                 <View style={styles.header}>
-                    <Text style={styles.title}>
-                        {step === 1 && (initialData ? 'Editar Rutina' : 'Nueva Rutina')}
-                        {step === 2 && 'Seleccionar Ejercicios'}
-                        {step === 3 && 'Configurar Ejercicios'}
-                    </Text>
-                    <IconButton
-                        icon={<Ionicons name="close" size={24} color={COLORS.textSecondary} />}
-                        onPress={onClose}
-                        variant="ghost"
-                    />
+                    <View style={styles.headerText}>
+                        <Text style={styles.title}>
+                            {step === 1 ? (initialData ? 'Editar rutina' : 'Nueva rutina') : null}
+                            {step === 2 ? 'Elegir ejercicios' : null}
+                            {step === 3 ? 'Configurar' : null}
+                        </Text>
+                        <Text style={styles.stepCounter}>Paso {step} de 3</Text>
+                    </View>
+                    <TouchableOpacity onPress={requestClose} style={styles.closeBtn} accessibilityLabel="Cerrar">
+                        <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+                    </TouchableOpacity>
                 </View>
 
-                {/* Progress indicator */}
                 <View style={styles.progressContainer}>
-                    {[1, 2, 3].map(s => (
-                        <View
-                            key={s}
-                            style={[
-                                styles.progressDot,
-                                s <= step && styles.progressDotActive
-                            ]}
-                        />
+                    {[1, 2, 3].map((s) => (
+                        <View key={s} style={[styles.progressBar, s <= step && styles.progressBarActive]} />
                     ))}
                 </View>
 
-                <View style={styles.content}>
-                    {/* Step 1: Basic Info */}
-                    {step === 1 && (
-                        <View style={styles.stepContainer}>
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.label}>Nombre</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Ej: Pecho y Tríceps"
-                                    placeholderTextColor={COLORS.textMuted}
-                                    value={name}
-                                    onChangeText={setName}
-                                />
-                            </View>
-
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.label}>Descripción (Opcional)</Text>
-                                <TextInput
-                                    style={[styles.input, styles.textArea]}
-                                    placeholder="Objetivo de esta rutina..."
-                                    placeholderTextColor={COLORS.textMuted}
-                                    value={description}
-                                    onChangeText={setDescription}
-                                    multiline
-                                    numberOfLines={3}
-                                />
-                            </View>
+                {step === 1 && (
+                    <ScrollView contentContainerStyle={styles.stepContent} keyboardShouldPersistTaps="handled">
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Nombre</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Ej: Push A — Fuerza"
+                                placeholderTextColor={COLORS.textMuted}
+                                value={name}
+                                onChangeText={setName}
+                                autoFocus={!initialData}
+                                returnKeyType="next"
+                            />
                         </View>
-                    )}
 
-                    {/* Step 2: Select Exercises */}
-                    {step === 2 && (
-                        <View style={styles.stepContainer}>
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Descripción (opcional)</Text>
+                            <TextInput
+                                style={[styles.input, styles.textArea]}
+                                placeholder="Objetivo o enfoque de esta rutina…"
+                                placeholderTextColor={COLORS.textMuted}
+                                value={description}
+                                onChangeText={setDescription}
+                                multiline
+                            />
+                        </View>
+                    </ScrollView>
+                )}
+
+                {step === 2 && (
+                    <View style={styles.stepFlex}>
+                        <View style={styles.searchContainer}>
+                            <Ionicons name="search" size={18} color={COLORS.textMuted} />
                             <TextInput
                                 style={styles.searchInput}
-                                placeholder="🔍 Buscar ejercicio..."
+                                placeholder="Buscar ejercicio…"
                                 placeholderTextColor={COLORS.textMuted}
-                                value={searchQuery}
-                                onChangeText={setSearchQuery}
+                                value={query}
+                                onChangeText={setQuery}
+                                autoCorrect={false}
                             />
+                        </View>
 
-                            <ScrollView style={styles.exerciseList}>
-                                {filteredExercises.map(exercise => {
-                                    const isSelected = selectedExercises.some(e => e.id === exercise.id);
+                        <ScrollView contentContainerStyle={styles.listContent} keyboardShouldPersistTaps="handled">
+                            {filtered.length === 0 ? (
+                                <EmptyState
+                                    icon="search-outline"
+                                    title="Sin resultados"
+                                    message="Prueba con otro nombre o crea el ejercicio desde la pestaña Ejercicios."
+                                />
+                            ) : (
+                                filtered.map((exercise) => {
+                                    const selected = drafts.some((d) => d.exercise.id === exercise.id);
                                     return (
                                         <TouchableOpacity
                                             key={exercise.id}
-                                            style={[
-                                                styles.exerciseItem,
-                                                isSelected && styles.exerciseItemSelected
-                                            ]}
+                                            style={[styles.exerciseItem, selected && styles.exerciseItemSelected]}
                                             onPress={() => toggleExercise(exercise)}
                                         >
-                                            <View>
-                                                <Text style={[
-                                                    styles.exerciseName,
-                                                    isSelected && styles.textSelected
-                                                ]}>{exercise.name}</Text>
+                                            <View
+                                                style={[
+                                                    styles.exerciseDot,
+                                                    { backgroundColor: getMuscleColor(exercise.muscle_group) },
+                                                ]}
+                                            />
+                                            <View style={styles.exerciseItemBody}>
+                                                <Text style={styles.exerciseName}>{exercise.name}</Text>
                                                 <Text style={styles.exerciseMuscle}>{exercise.muscle_group}</Text>
                                             </View>
-                                            {isSelected && (
-                                                <Ionicons name="checkmark-circle" size={24} color={COLORS.success} />
-                                            )}
+                                            <Ionicons
+                                                name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+                                                size={24}
+                                                color={selected ? COLORS.success : COLORS.surfaceHighlight}
+                                            />
                                         </TouchableOpacity>
                                     );
-                                })}
-                            </ScrollView>
+                                })
+                            )}
+                        </ScrollView>
 
-                            <View style={styles.summaryBar}>
-                                <Text style={styles.summaryText}>
-                                    {selectedExercises.length} ejercicios seleccionados
-                                </Text>
-                            </View>
-                        </View>
-                    )}
-
-                    {/* Step 3: Configure Exercises */}
-                    {step === 3 && (
-                        <ScrollView style={styles.stepContainer}>
-                            <Text style={styles.configHint}>
-                                Configura las series, repeticiones y descanso para cada ejercicio
+                        <View style={styles.summaryBar}>
+                            <Text style={styles.summaryText}>
+                                {drafts.length} {drafts.length === 1 ? 'ejercicio' : 'ejercicios'}
                             </Text>
+                        </View>
+                    </View>
+                )}
 
-                            {selectedExercises.map((exercise, index) => (
-                                <View key={exercise.id} style={styles.configCard}>
-                                    <View style={styles.configHeader}>
-                                        <Text style={styles.configIndex}>{index + 1}</Text>
-                                        <View style={styles.configInfo}>
-                                            <Text style={styles.configName}>{exercise.name}</Text>
-                                            <Text style={styles.configMuscle}>{exercise.muscle_group}</Text>
-                                        </View>
+                {step === 3 && (
+                    <ScrollView contentContainerStyle={styles.stepContent} keyboardShouldPersistTaps="handled">
+                        <View
+                            style={[
+                                styles.estimateBanner,
+                                { borderColor: getDurationColor(estimatedMinutes) + '40' },
+                            ]}
+                        >
+                            <Ionicons name="time" size={18} color={getDurationColor(estimatedMinutes)} />
+                            <Text style={styles.estimateText}>
+                                Duración estimada{' '}
+                                <Text style={{ color: getDurationColor(estimatedMinutes), fontWeight: '800' }}>
+                                    {estimatedMinutes} min
+                                </Text>{' '}
+                                · {getDurationLabel(estimatedMinutes)}
+                            </Text>
+                        </View>
+
+                        {drafts.map((draft, index) => (
+                            <View key={draft.exercise.id} style={styles.configCard}>
+                                <View style={styles.configHeader}>
+                                    <Text
+                                        style={[
+                                            styles.configIndex,
+                                            { backgroundColor: getMuscleColor(draft.exercise.muscle_group) + '25' },
+                                        ]}
+                                    >
+                                        {index + 1}
+                                    </Text>
+                                    <View style={styles.configInfo}>
+                                        <Text style={styles.configName}>{draft.exercise.name}</Text>
+                                        <Text style={styles.configMuscle}>{draft.exercise.muscle_group}</Text>
                                     </View>
-
-                                    {/* Sets & Reps Row */}
-                                    <View style={styles.configRow}>
-                                        <View style={styles.configField}>
-                                            <Text style={styles.configFieldLabel}>Series</Text>
-                                            <View style={styles.stepper}>
-                                                <TouchableOpacity
-                                                    style={styles.stepperBtn}
-                                                    onPress={() => updateExercise(exercise.id, { sets: Math.max(1, exercise.sets - 1) })}
-                                                >
-                                                    <Ionicons name="remove" size={16} color={COLORS.textPrimary} />
-                                                </TouchableOpacity>
-                                                <Text style={styles.stepperValue}>{exercise.sets}</Text>
-                                                <TouchableOpacity
-                                                    style={styles.stepperBtn}
-                                                    onPress={() => updateExercise(exercise.id, { sets: exercise.sets + 1 })}
-                                                >
-                                                    <Ionicons name="add" size={16} color={COLORS.textPrimary} />
-                                                </TouchableOpacity>
-                                            </View>
-                                        </View>
-
-                                        <View style={styles.configField}>
-                                            <Text style={styles.configFieldLabel}>Repeticiones</Text>
-                                            <View style={styles.stepper}>
-                                                <TouchableOpacity
-                                                    style={styles.stepperBtn}
-                                                    onPress={() => updateExercise(exercise.id, { reps: Math.max(1, Number(exercise.reps) - 1) })}
-                                                >
-                                                    <Ionicons name="remove" size={16} color={COLORS.textPrimary} />
-                                                </TouchableOpacity>
-                                                <Text style={styles.stepperValue}>{exercise.reps}</Text>
-                                                <TouchableOpacity
-                                                    style={styles.stepperBtn}
-                                                    onPress={() => updateExercise(exercise.id, { reps: Number(exercise.reps) + 1 })}
-                                                >
-                                                    <Ionicons name="add" size={16} color={COLORS.textPrimary} />
-                                                </TouchableOpacity>
-                                            </View>
-                                        </View>
-                                    </View>
-
-                                    {/* Rest Time Chips */}
-                                    <View style={styles.restTimeContainer}>
-                                        <Text style={styles.configFieldLabel}>
-                                            <Ionicons name="timer-outline" size={14} color={COLORS.textSecondary} /> Descanso
-                                        </Text>
-                                        <View style={styles.restTimeOptions}>
-                                            {REST_TIME_OPTIONS.map(time => (
-                                                <TouchableOpacity
-                                                    key={time}
-                                                    style={[
-                                                        styles.restTimeChip,
-                                                        exercise.restTime === time && styles.restTimeChipActive
-                                                    ]}
-                                                    onPress={() => updateExercise(exercise.id, { restTime: time })}
-                                                >
-                                                    <Text style={[
-                                                        styles.restTimeChipText,
-                                                        exercise.restTime === time && styles.restTimeChipTextActive
-                                                    ]}>
-                                                        {formatRestTime(time)}
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            ))}
-                                        </View>
-                                    </View>
-
-                                    {/* Time Per Rep Chips */}
-                                    <View style={styles.restTimeContainer}>
-                                        <Text style={styles.configFieldLabel}>
-                                            <Ionicons name="speedometer-outline" size={14} color={COLORS.textSecondary} /> Tiempo/Rep
-                                        </Text>
-                                        <View style={styles.restTimeOptions}>
-                                            {TIME_PER_REP_OPTIONS.map(time => (
-                                                <TouchableOpacity
-                                                    key={time}
-                                                    style={[
-                                                        styles.restTimeChip,
-                                                        exercise.timePerRep === time && styles.timePerRepChipActive
-                                                    ]}
-                                                    onPress={() => updateExercise(exercise.id, { timePerRep: time })}
-                                                >
-                                                    <Text style={[
-                                                        styles.restTimeChipText,
-                                                        exercise.timePerRep === time && styles.timePerRepChipTextActive
-                                                    ]}>
-                                                        {time}s
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            ))}
-                                        </View>
-                                        <Text style={styles.timePerRepHint}>
-                                            {exercise.timePerRep === 2 ? '⚡ Rápido' :
-                                                exercise.timePerRep === 3 ? '💪 Normal' :
-                                                    exercise.timePerRep === 4 ? '🎯 Controlado' : '🐢 Lento'}
-                                        </Text>
+                                    {/* Order decides the order of the workout, so it has to be editable. */}
+                                    <View style={styles.reorderColumn}>
+                                        <TouchableOpacity
+                                            onPress={() => moveDraft(index, -1)}
+                                            disabled={index === 0}
+                                            style={[styles.reorderBtn, index === 0 && styles.reorderBtnDisabled]}
+                                            accessibilityLabel="Subir ejercicio"
+                                        >
+                                            <Ionicons name="chevron-up" size={16} color={COLORS.textSecondary} />
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            onPress={() => moveDraft(index, 1)}
+                                            disabled={index === drafts.length - 1}
+                                            style={[
+                                                styles.reorderBtn,
+                                                index === drafts.length - 1 && styles.reorderBtnDisabled,
+                                            ]}
+                                            accessibilityLabel="Bajar ejercicio"
+                                        >
+                                            <Ionicons name="chevron-down" size={16} color={COLORS.textSecondary} />
+                                        </TouchableOpacity>
                                     </View>
                                 </View>
-                            ))}
-                        </ScrollView>
-                    )}
-                </View>
 
-                {/* Footer */}
-                <View style={styles.footer}>
+                                <View style={styles.configRow}>
+                                    <View style={styles.configField}>
+                                        <Text style={styles.configFieldLabel}>Series</Text>
+                                        <View style={styles.stepper}>
+                                            <TouchableOpacity
+                                                style={styles.stepperBtn}
+                                                onPress={() =>
+                                                    patchDraft(draft.exercise.id, { sets: Math.max(1, draft.sets - 1) })
+                                                }
+                                                accessibilityLabel="Quitar una serie"
+                                            >
+                                                <Ionicons name="remove" size={16} color={COLORS.textPrimary} />
+                                            </TouchableOpacity>
+                                            <Text style={styles.stepperValue}>{draft.sets}</Text>
+                                            <TouchableOpacity
+                                                style={styles.stepperBtn}
+                                                onPress={() =>
+                                                    patchDraft(draft.exercise.id, { sets: Math.min(12, draft.sets + 1) })
+                                                }
+                                                accessibilityLabel="Añadir una serie"
+                                            >
+                                                <Ionicons name="add" size={16} color={COLORS.textPrimary} />
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.configField}>
+                                        {/* Free text: "8-10", "15", "10 por pierna"… */}
+                                        <Text style={styles.configFieldLabel}>Repeticiones</Text>
+                                        <TextInput
+                                            style={styles.repsInput}
+                                            value={draft.reps}
+                                            onChangeText={(reps) => patchDraft(draft.exercise.id, { reps })}
+                                            placeholder="8-10"
+                                            placeholderTextColor={COLORS.textMuted}
+                                            maxLength={16}
+                                        />
+                                    </View>
+                                </View>
+
+                                <ChipRow
+                                    icon="timer-outline"
+                                    label="Descanso"
+                                    options={REST_TIME_OPTIONS}
+                                    value={draft.restTime}
+                                    format={formatSeconds}
+                                    activeColor={COLORS.primary}
+                                    onSelect={(restTime) => patchDraft(draft.exercise.id, { restTime })}
+                                />
+
+                                <ChipRow
+                                    icon="speedometer-outline"
+                                    label={`Tiempo por rep · ${TEMPO_HINTS[draft.timePerRep] ?? ''}`}
+                                    options={TIME_PER_REP_OPTIONS}
+                                    value={draft.timePerRep}
+                                    format={(v) => `${v}s`}
+                                    activeColor={COLORS.secondary}
+                                    onSelect={(timePerRep) => patchDraft(draft.exercise.id, { timePerRep })}
+                                />
+
+                                <TextInput
+                                    style={styles.notesInput}
+                                    value={draft.notes}
+                                    onChangeText={(notes) => patchDraft(draft.exercise.id, { notes })}
+                                    placeholder="Notas de técnica (opcional)…"
+                                    placeholderTextColor={COLORS.textMuted}
+                                    multiline
+                                />
+                            </View>
+                        ))}
+                    </ScrollView>
+                )}
+
+                <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, SPACING.md) }]}>
                     {step > 1 && (
                         <Button
                             title="Atrás"
                             variant="secondary"
-                            onPress={handleBack}
-                            style={{ flex: 1 }}
+                            onPress={() => setStep((s) => (s === 3 ? 2 : 1))}
+                            style={styles.footerBtn}
                         />
                     )}
                     <Button
-                        title={step === 3 ? (initialData ? "Guardar Cambios" : "Crear Rutina") : "Siguiente"}
-                        variant={step === 3 ? "gradient" : "primary"}
-                        onPress={step === 3 ? handleSave : handleNext}
-                        loading={loading}
-                        style={{ flex: 1 }}
+                        title={step === 3 ? (initialData ? 'Guardar cambios' : 'Crear rutina') : 'Continuar'}
+                        variant="gradient"
+                        onPress={step === 3 ? handleSave : goNext}
+                        loading={saving}
+                        style={styles.footerBtnPrimary}
                     />
                 </View>
-            </View>
+            </KeyboardAvoidingView>
         </Modal>
+    );
+}
+
+function ChipRow({
+    icon,
+    label,
+    options,
+    value,
+    format,
+    activeColor,
+    onSelect,
+}: {
+    icon: React.ComponentProps<typeof Ionicons>['name'];
+    label: string;
+    options: number[];
+    value: number;
+    format: (value: number) => string;
+    activeColor: string;
+    onSelect: (value: number) => void;
+}) {
+    return (
+        <View style={styles.chipSection}>
+            <View style={styles.chipLabelRow}>
+                <Ionicons name={icon} size={13} color={COLORS.textMuted} />
+                <Text style={styles.configFieldLabel}>{label}</Text>
+            </View>
+            <View style={styles.chipRow}>
+                {options.map((option) => {
+                    const active = option === value;
+                    return (
+                        <TouchableOpacity
+                            key={option}
+                            style={[styles.chip, active && { backgroundColor: activeColor }]}
+                            onPress={() => onSelect(option)}
+                        >
+                            <Text style={[styles.chipText, active && styles.chipTextActive]}>{format(option)}</Text>
+                        </TouchableOpacity>
+                    );
+                })}
+            </View>
+        </View>
     );
 }
 
@@ -422,238 +542,297 @@ const styles = StyleSheet.create({
     },
     header: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        padding: SPACING.md,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.surfaceHighlight,
+        justifyContent: 'space-between',
+        paddingHorizontal: SPACING.md,
+        paddingVertical: SPACING.sm,
+    },
+    headerText: {
+        flex: 1,
     },
     title: {
-        fontSize: FONT_SIZES.lg,
-        fontWeight: '700',
+        fontSize: FONT_SIZES.xl,
+        fontWeight: '800',
         color: COLORS.textPrimary,
+    },
+    stepCounter: {
+        fontSize: FONT_SIZES.xs,
+        color: COLORS.textMuted,
+        marginTop: 2,
+    },
+    closeBtn: {
+        width: HIT_SIZE,
+        height: HIT_SIZE,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     progressContainer: {
         flexDirection: 'row',
-        justifyContent: 'center',
-        gap: SPACING.sm,
-        paddingVertical: SPACING.sm,
+        gap: 4,
+        paddingHorizontal: SPACING.md,
+        paddingBottom: SPACING.md,
     },
-    progressDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
+    progressBar: {
+        flex: 1,
+        height: 3,
+        borderRadius: 2,
         backgroundColor: COLORS.surfaceHighlight,
     },
-    progressDotActive: {
+    progressBarActive: {
         backgroundColor: COLORS.primary,
-        width: 24,
     },
-    content: {
+    stepFlex: {
         flex: 1,
     },
-    stepContainer: {
-        flex: 1,
+    stepContent: {
         padding: SPACING.md,
+        paddingBottom: SPACING.xl,
+        gap: SPACING.md,
     },
     inputGroup: {
-        marginBottom: SPACING.lg,
+        gap: SPACING.xs,
     },
     label: {
-        fontSize: FONT_SIZES.sm,
+        fontSize: FONT_SIZES.xs,
+        fontWeight: '700',
         color: COLORS.textSecondary,
-        marginBottom: SPACING.sm,
-        fontWeight: '600',
+        textTransform: 'uppercase',
+        letterSpacing: 0.8,
     },
     input: {
         backgroundColor: COLORS.surface,
         borderRadius: BORDER_RADIUS.md,
-        padding: SPACING.md,
-        color: COLORS.textPrimary,
         borderWidth: 1,
         borderColor: COLORS.surfaceHighlight,
+        paddingHorizontal: SPACING.md,
+        paddingVertical: SPACING.md,
+        color: COLORS.textPrimary,
         fontSize: FONT_SIZES.md,
     },
     textArea: {
-        height: 100,
+        minHeight: 90,
         textAlignVertical: 'top',
     },
-    searchInput: {
+    searchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.sm,
+        marginHorizontal: SPACING.md,
+        paddingHorizontal: SPACING.md,
+        height: 46,
         backgroundColor: COLORS.surface,
-        borderRadius: BORDER_RADIUS.full,
-        padding: SPACING.md,
-        paddingHorizontal: SPACING.lg,
-        color: COLORS.textPrimary,
-        marginBottom: SPACING.md,
+        borderRadius: BORDER_RADIUS.md,
+        borderWidth: 1,
+        borderColor: COLORS.surfaceHighlight,
     },
-    exerciseList: {
+    searchInput: {
         flex: 1,
+        color: COLORS.textPrimary,
+        fontSize: FONT_SIZES.sm,
+    },
+    listContent: {
+        padding: SPACING.md,
+        gap: SPACING.xs,
     },
     exerciseItem: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
+        gap: SPACING.sm,
         padding: SPACING.md,
         backgroundColor: COLORS.surface,
-        marginBottom: SPACING.sm,
         borderRadius: BORDER_RADIUS.md,
         borderWidth: 1,
-        borderColor: 'transparent',
+        borderColor: COLORS.surfaceHighlight,
     },
     exerciseItemSelected: {
-        borderColor: COLORS.primary,
-        backgroundColor: COLORS.surfaceLight,
+        borderColor: COLORS.success + '80',
+        backgroundColor: COLORS.success + '0D',
+    },
+    exerciseDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+    },
+    exerciseItemBody: {
+        flex: 1,
     },
     exerciseName: {
-        fontSize: FONT_SIZES.md,
+        fontSize: FONT_SIZES.sm,
         fontWeight: '600',
         color: COLORS.textPrimary,
     },
-    textSelected: {
-        color: COLORS.primaryLight,
-    },
     exerciseMuscle: {
-        fontSize: FONT_SIZES.sm,
-        color: COLORS.textSecondary,
+        fontSize: FONT_SIZES.xs,
+        color: COLORS.textMuted,
     },
     summaryBar: {
-        paddingVertical: SPACING.md,
+        paddingHorizontal: SPACING.md,
+        paddingVertical: SPACING.sm,
         borderTopWidth: 1,
         borderTopColor: COLORS.surfaceHighlight,
     },
     summaryText: {
+        fontSize: FONT_SIZES.sm,
         color: COLORS.textSecondary,
+        fontWeight: '600',
         textAlign: 'center',
     },
-    configHint: {
-        color: COLORS.textSecondary,
+    estimateBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.sm,
+        padding: SPACING.md,
+        borderRadius: BORDER_RADIUS.md,
+        backgroundColor: COLORS.surface,
+        borderWidth: 1,
+    },
+    estimateText: {
         fontSize: FONT_SIZES.sm,
-        textAlign: 'center',
-        marginBottom: SPACING.lg,
+        color: COLORS.textSecondary,
     },
     configCard: {
         backgroundColor: COLORS.surface,
         borderRadius: BORDER_RADIUS.lg,
-        padding: SPACING.md,
-        marginBottom: SPACING.md,
         borderWidth: 1,
         borderColor: COLORS.surfaceHighlight,
+        padding: SPACING.md,
+        gap: SPACING.md,
     },
     configHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: SPACING.md,
+        gap: SPACING.sm,
     },
     configIndex: {
         width: 28,
         height: 28,
         borderRadius: 14,
-        backgroundColor: COLORS.primary,
-        color: '#FFF',
         textAlign: 'center',
         lineHeight: 28,
-        fontWeight: '700',
-        marginRight: SPACING.sm,
+        fontWeight: '800',
+        fontSize: FONT_SIZES.sm,
+        color: COLORS.textPrimary,
+        overflow: 'hidden',
     },
     configInfo: {
         flex: 1,
     },
     configName: {
         fontSize: FONT_SIZES.md,
-        fontWeight: '600',
+        fontWeight: '700',
         color: COLORS.textPrimary,
     },
     configMuscle: {
         fontSize: FONT_SIZES.xs,
-        color: COLORS.textSecondary,
+        color: COLORS.textMuted,
+    },
+    reorderColumn: {
+        gap: 3,
+    },
+    reorderBtn: {
+        width: 30,
+        height: 22,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: COLORS.surfaceLight,
+        borderRadius: BORDER_RADIUS.sm,
+    },
+    reorderBtnDisabled: {
+        opacity: 0.3,
     },
     configRow: {
         flexDirection: 'row',
         gap: SPACING.md,
-        marginBottom: SPACING.md,
     },
     configField: {
         flex: 1,
+        gap: SPACING.xs,
     },
     configFieldLabel: {
         fontSize: FONT_SIZES.xs,
-        color: COLORS.textSecondary,
-        marginBottom: SPACING.xs,
+        color: COLORS.textMuted,
         fontWeight: '600',
     },
     stepper: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'space-between',
         backgroundColor: COLORS.surfaceLight,
-        borderRadius: BORDER_RADIUS.md,
-        overflow: 'hidden',
+        borderRadius: BORDER_RADIUS.sm,
+        padding: 4,
     },
     stepperBtn: {
-        padding: SPACING.sm,
-        paddingHorizontal: SPACING.md,
+        width: 32,
+        height: 32,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: COLORS.surface,
+        borderRadius: BORDER_RADIUS.sm,
     },
     stepperValue: {
-        flex: 1,
-        textAlign: 'center',
+        fontSize: FONT_SIZES.md,
+        fontWeight: '800',
         color: COLORS.textPrimary,
-        fontWeight: '700',
-        fontSize: FONT_SIZES.lg,
     },
     repsInput: {
         backgroundColor: COLORS.surfaceLight,
-        borderRadius: BORDER_RADIUS.md,
-        padding: SPACING.md,
+        borderRadius: BORDER_RADIUS.sm,
+        paddingVertical: 10,
+        paddingHorizontal: SPACING.sm,
+        textAlign: 'center',
         color: COLORS.textPrimary,
         fontSize: FONT_SIZES.md,
-        textAlign: 'center',
-        fontWeight: '600',
+        fontWeight: '700',
     },
-    restTimeContainer: {
-        marginTop: SPACING.xs,
+    chipSection: {
+        gap: SPACING.xs,
     },
-    restTimeOptions: {
+    chipLabelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+    },
+    chipRow: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: SPACING.xs,
-        marginTop: SPACING.xs,
+        gap: 6,
     },
-    restTimeChip: {
-        paddingHorizontal: SPACING.sm,
+    chip: {
+        paddingHorizontal: 10,
         paddingVertical: 6,
+        borderRadius: BORDER_RADIUS.full,
+        backgroundColor: COLORS.surfaceLight,
+    },
+    chipText: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: COLORS.textSecondary,
+    },
+    chipTextActive: {
+        color: '#FFF',
+    },
+    notesInput: {
         backgroundColor: COLORS.surfaceLight,
         borderRadius: BORDER_RADIUS.sm,
-    },
-    restTimeChipActive: {
-        backgroundColor: COLORS.primary,
-    },
-    restTimeChipText: {
-        color: COLORS.textSecondary,
+        padding: SPACING.sm,
+        color: COLORS.textPrimary,
         fontSize: FONT_SIZES.sm,
-    },
-    restTimeChipTextActive: {
-        color: '#FFF',
-        fontWeight: '600',
-    },
-    timePerRepChipActive: {
-        backgroundColor: COLORS.secondary,
-    },
-    timePerRepChipTextActive: {
-        color: '#FFF',
-        fontWeight: '600',
-    },
-    timePerRepHint: {
-        fontSize: FONT_SIZES.xs,
-        color: COLORS.textMuted,
-        marginTop: SPACING.xs,
-        textAlign: 'center',
+        minHeight: 44,
+        textAlignVertical: 'top',
     },
     footer: {
         flexDirection: 'row',
-        padding: SPACING.md,
-        gap: SPACING.md,
+        gap: SPACING.sm,
+        paddingHorizontal: SPACING.md,
+        paddingTop: SPACING.md,
         borderTopWidth: 1,
         borderTopColor: COLORS.surfaceHighlight,
         backgroundColor: COLORS.surface,
-        paddingBottom: SPACING.xl,
+    },
+    footerBtn: {
+        flex: 1,
+    },
+    footerBtnPrimary: {
+        flex: 2,
     },
 });

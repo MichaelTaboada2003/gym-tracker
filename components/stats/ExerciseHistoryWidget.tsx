@@ -4,7 +4,7 @@
  * Similar design to BodyWeightWidget but for tracking exercise progress
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useState, useEffect, useMemo } from 'react';
 import {
     View,
     Text,
@@ -19,6 +19,8 @@ import { LineChart } from 'react-native-gifted-charts';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
 import { storage } from '../../lib/localDatabase';
+import { useRefreshOnFocus } from '../../hooks/useRefreshOnFocus';
+import { parseISODate, toISODate } from '../../lib/utils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -59,30 +61,27 @@ export function ExerciseProgressWidget() {
     const [showExercisePicker, setShowExercisePicker] = useState(false);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        fetchExerciseData();
-    }, []);
-
-    const fetchExerciseData = async () => {
+    const fetchExerciseData = useCallback(async () => {
         try {
-            setLoading(true);
+            const [logs, exercisesData, sessions] = await Promise.all([
+                storage.workoutLogs.getAll(),
+                storage.exercises.getAll(),
+                storage.workoutSessions.getAll(),
+            ]);
 
-            const logs = await storage.workoutLogs.getAll() as any[];
-            const exercisesData = await storage.exercises.getAll() as any[];
-            const sessions = await storage.workoutSessions.getAll() as any[];
+            // Indexed lookups: the previous `.find()` inside the loop made this
+            // O(logs × exercises) and crawled once a few months of data existed.
+            const exercisesById = new Map(exercisesData.map((e) => [e.id, e]));
+            const sessionDates = new Map(sessions.map((s) => [s.id, s.session_date]));
 
-            // Filter out warmup sets
-            const workLogs = logs.filter(l => l.is_warmup !== 1 && l.is_warmup !== true);
-
-            // Group logs by exercise
+            const workLogs = logs.filter((l) => !l.is_warmup);
             const exerciseMap = new Map<string, ExerciseData>();
 
             workLogs.forEach(log => {
-                const exercise = exercisesData.find((e: any) => e.id === log.exercise_id);
+                const exercise = exercisesById.get(log.exercise_id);
                 if (!exercise) return;
 
-                const session = sessions.find((s: any) => s.id === log.session_id);
-                const sessionDate = session?.session_date || new Date().toISOString().split('T')[0];
+                const sessionDate = sessionDates.get(log.session_id) || toISODate();
 
                 if (!exerciseMap.has(log.exercise_id)) {
                     exerciseMap.set(log.exercise_id, {
@@ -113,9 +112,11 @@ export function ExerciseProgressWidget() {
                         }
                     });
 
+                    // ISO dates sort correctly as plain strings, and unlike
+                    // `new Date('YYYY-MM-DD')` this does not shift into UTC.
                     const history = Array.from(dateMap.entries())
                         .map(([date, data]) => ({ date, ...data }))
-                        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                        .sort((a, b) => a.date.localeCompare(b.date));
 
                     return { ...ex, history };
                 })
@@ -128,15 +129,25 @@ export function ExerciseProgressWidget() {
                 });
 
             setExercises(processedExercises);
-            if (processedExercises.length > 0 && !selectedExerciseId) {
-                setSelectedExerciseId(processedExercises[0].exerciseId);
-            }
+            // Default to the most recently trained exercise, but never override
+            // a pick the user already made.
+            setSelectedExerciseId((current) =>
+                current && processedExercises.some((e) => e.exerciseId === current)
+                    ? current
+                    : (processedExercises[0]?.exerciseId ?? null)
+            );
         } catch (error) {
-            console.error('Error fetching exercise data:', error);
+            console.error('[exercise-progress] load failed:', error);
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        void fetchExerciseData();
+    }, [fetchExerciseData]);
+
+    useRefreshOnFocus(fetchExerciseData);
 
     const selectedExercise = useMemo(() => {
         return exercises.find(e => e.exerciseId === selectedExerciseId);
@@ -157,7 +168,7 @@ export function ExerciseProgressWidget() {
             case 'all': return selectedExercise.history;
         }
 
-        return selectedExercise.history.filter(h => new Date(h.date) >= cutoffDate);
+        return selectedExercise.history.filter(h => parseISODate(h.date) >= cutoffDate);
     };
 
     const getStats = (range: DateRange): ExerciseStats => {
@@ -186,7 +197,7 @@ export function ExerciseProgressWidget() {
 
     const chartData = useMemo(() => {
         return filteredHistory.map((h, i) => {
-            const date = new Date(h.date);
+            const date = parseISODate(h.date);
             return {
                 value: h.weight,
                 label: `${date.getDate()}/${date.getMonth() + 1}`,
@@ -196,7 +207,7 @@ export function ExerciseProgressWidget() {
     }, [filteredHistory]);
 
     const formatDate = (dateStr: string) => {
-        const date = new Date(dateStr);
+        const date = parseISODate(dateStr);
         const day = date.toLocaleDateString('es', { weekday: 'short' });
         const dayNum = date.getDate();
         const month = date.toLocaleDateString('es', { month: 'short' });

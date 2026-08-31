@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Dimensions, RefreshControl, TouchableOpacity } from 'react-native';
 import { BarChart, PieChart } from 'react-native-gifted-charts';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
@@ -9,6 +8,17 @@ import { Card } from '../../components/ui/Card';
 import { storage } from '../../lib/localDatabase';
 import { useAdvancedStats } from '../../hooks/useAdvancedStats';
 import { ExerciseProgressWidget } from '../../components/stats/ExerciseHistoryWidget';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { useRefreshOnFocus } from '../../hooks/useRefreshOnFocus';
+import {
+    formatMinutes,
+    formatVolume,
+    formatWeight,
+    parseISODate,
+    startOfWeek,
+    toISODate,
+    weekdayIndex,
+} from '../../lib/utils';
 
 const { width } = Dimensions.get('window');
 
@@ -64,7 +74,7 @@ export default function StatsScreen() {
         refetch: refetchAdvanced
     } = useAdvancedStats();
 
-    const fetchStats = async () => {
+    const fetchStats = useCallback(async () => {
         try {
             setLoading(true);
 
@@ -86,26 +96,18 @@ export default function StatsScreen() {
                 totalMinutes,
             });
 
-            // Calculate weekly volume based on session_date
+            // Week runs Monday→Sunday, compared on local calendar days.
             const today = new Date();
-            const dayOfWeek = today.getDay();
-            const startOfWeek = new Date(today);
-            startOfWeek.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-            startOfWeek.setHours(0, 0, 0, 0);
+            const weekStart = toISODate(startOfWeek(today));
 
             const weekDays = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
             const volumeByDay: number[] = [0, 0, 0, 0, 0, 0, 0];
             const sessionsByDay: number[] = [0, 0, 0, 0, 0, 0, 0];
 
-            const weekSessions = sessions.filter(s => {
-                const sessionDate = new Date(s.session_date);
-                return sessionDate >= startOfWeek;
-            });
+            const weekSessions = sessions.filter(s => s.session_date >= weekStart);
 
             weekSessions.forEach(session => {
-                const sessionDate = new Date(session.session_date);
-                let dayIndex = sessionDate.getDay() - 1;
-                if (dayIndex < 0) dayIndex = 6;
+                const dayIndex = weekdayIndex(parseISODate(session.session_date));
 
                 sessionsByDay[dayIndex] += 1;
 
@@ -114,8 +116,7 @@ export default function StatsScreen() {
                 volumeByDay[dayIndex] += sessionVolume;
             });
 
-            let todayIndex = today.getDay() - 1;
-            if (todayIndex < 0) todayIndex = 6;
+            const todayIndex = weekdayIndex(today);
 
             const totalWeekVolume = volumeByDay.reduce((sum, v) => sum + v, 0);
             setHasVolumeData(totalWeekVolume > 0);
@@ -138,61 +139,36 @@ export default function StatsScreen() {
         } finally {
             setLoading(false);
         }
-    };
-
-    useEffect(() => {
-        fetchStats();
     }, []);
 
-    const handleRefresh = () => {
-        fetchStats();
-        refetchAdvanced();
-    };
+    useEffect(() => {
+        void fetchStats();
+    }, [fetchStats]);
 
-    const formatHours = (minutes: number) => {
-        if (minutes < 60) return `${minutes}m`;
-        const hours = Math.floor(minutes / 60);
-        const mins = minutes % 60;
-        return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
-    };
+    const handleRefresh = useCallback(async () => {
+        await Promise.all([fetchStats(), refetchAdvanced()]);
+    }, [fetchStats, refetchAdvanced]);
 
-    const formatVolume = (kg: number) => {
-        if (kg >= 1000) return `${(kg / 1000).toFixed(1)}t`;
-        return `${Math.round(kg)} kg`;
-    };
+    // Numbers here go stale the moment a workout is saved on another tab.
+    useRefreshOnFocus(handleRefresh);
 
     const maxVolume = Math.max(...weeklyVolume.map(v => v.value), 100);
     const topRecords = getTopRecords(5);
 
     return (
         <View style={styles.container}>
-            {/* Header with Gradient */}
-            <LinearGradient
-                colors={[COLORS.primary + '15', 'transparent']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.header}
-            >
-                <View style={styles.headerContent}>
-                    <View style={styles.headerTextContainer}>
-                        <Text style={styles.headerSubtitle}>ANALIZA TU</Text>
-                        <Text style={styles.headerTitle}>Progreso</Text>
-                    </View>
-                    <View style={styles.headerButtons}>
-                        <TouchableOpacity
-                            style={styles.headerBtnSecondary}
-                            onPress={() => router.push('/calendar')}
-                        >
-                            <LinearGradient
-                                colors={COLORS.gradients.secondary}
-                                style={styles.headerBtnGradient}
-                            >
-                                <Ionicons name="calendar" size={20} color="#FFF" />
-                            </LinearGradient>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </LinearGradient>
+            <ScreenHeader
+                eyebrow="Analiza tu"
+                title="Progreso"
+                actions={[
+                    {
+                        icon: 'calendar',
+                        variant: 'secondary',
+                        accessibilityLabel: 'Ver calendario',
+                        onPress: () => router.push('/calendar'),
+                    },
+                ]}
+            />
 
             <ScrollView
                 style={styles.scrollView}
@@ -305,11 +281,11 @@ export default function StatsScreen() {
                                     <View style={styles.prInfo}>
                                         <Text style={styles.prExercise}>{record.exerciseName}</Text>
                                         <Text style={styles.prDetails}>
-                                            {record.weight}kg × {record.reps} reps
+                                            {formatWeight(record.weight)}kg × {record.reps} reps
                                         </Text>
                                     </View>
                                     <View style={styles.prValue}>
-                                        <Text style={styles.pr1RM}>{record.estimated1RM}</Text>
+                                        <Text style={styles.pr1RM}>{Math.round(record.estimated1RM)}</Text>
                                         <Text style={styles.prUnit}>kg</Text>
                                     </View>
                                 </View>
@@ -344,7 +320,7 @@ export default function StatsScreen() {
                         </View>
                         <View style={styles.statItem}>
                             <Ionicons name="time" size={24} color={COLORS.info} style={styles.statIcon} />
-                            <Text style={styles.statValue}>{formatHours(stats.totalMinutes)}</Text>
+                            <Text style={styles.statValue}>{formatMinutes(stats.totalMinutes)}</Text>
                             <Text style={styles.statLabel}>Tiempo</Text>
                         </View>
                     </View>
@@ -368,46 +344,6 @@ const styles = StyleSheet.create({
         padding: SPACING.md,
         paddingBottom: SPACING.xxl,
         gap: SPACING.lg,
-    },
-    header: {
-        paddingHorizontal: SPACING.lg,
-        paddingTop: SPACING.xl,
-        paddingBottom: SPACING.lg,
-    },
-    headerContent: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    headerTextContainer: {
-        flex: 1,
-    },
-    headerSubtitle: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: COLORS.primary,
-        letterSpacing: 3,
-        marginBottom: 4,
-        textTransform: 'uppercase',
-    },
-    headerTitle: {
-        fontSize: 36,
-        fontWeight: '800',
-        color: COLORS.textPrimary,
-    },
-    headerButtons: {
-        flexDirection: 'row',
-        gap: SPACING.sm,
-    },
-    headerBtnSecondary: {
-        borderRadius: 14,
-        overflow: 'hidden',
-    },
-    headerBtnGradient: {
-        width: 48,
-        height: 48,
-        alignItems: 'center',
-        justifyContent: 'center',
     },
     scrollView: {
         flex: 1,
