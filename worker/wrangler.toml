@@ -2,6 +2,10 @@ name = "gym-tracker-analysis"
 main = "src/index.ts"
 compatibility_date = "2026-01-01"
 
+# La cuenta OAuth tiene acceso a más de una cuenta de Cloudflare; sin esto,
+# wrangler no puede elegir y falla en modo no interactivo.
+account_id = "2982e354419a7f661f8e5df0eef57f7e"
+
 # La API key NO va aquí. Se guarda como secreto cifrado:
 #   npx wrangler secret put GROQ_API_KEY
 #

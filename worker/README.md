@@ -30,12 +30,23 @@ npx wrangler deploy
 ```
 
 `wrangler deploy` imprime la URL, del estilo
-`https://gym-tracker-analysis.<tu-cuenta>.workers.dev`. Ponla en el `.env` de la
-app y recompila:
+`https://gym-tracker-analysis.<tu-cuenta>.workers.dev`. Hay que ponerla en **dos
+sitios**, porque cada uno cubre un caso distinto:
+
+**1. `.env`** — para `npx expo start` en tu máquina:
 
 ```
 EXPO_PUBLIC_ANALYSIS_URL=https://gym-tracker-analysis.tu-cuenta.workers.dev
 ```
+
+**2. `eas.json`**, en el bloque `env` de cada perfil — para las builds de APK/IPA.
+
+Este segundo paso es obligatorio y fácil de olvidar: `.env` está en `.gitignore`,
+así que **EAS no lo sube**. Si la URL solo está en `.env`, el APK se compila con
+la variable vacía y el análisis aparece como "no disponible" sin ningún error.
+
+Ponerla en `eas.json` es seguro: es un endpoint, no una credencial, y de todas
+formas acaba dentro del APK.
 
 Comprueba que responde:
 
