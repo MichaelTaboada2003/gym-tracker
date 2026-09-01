@@ -194,7 +194,9 @@ export function useWorkoutSession() {
             reps: set.reps,
             rpe: set.rpe,
             is_warmup: set.isWarmup,
-            logged_at: nowIso,
+            // Cuándo se hizo la serie, no cuándo se guardó el entreno. Antes
+            // todas compartían el mismo instante y el ritmo era inobservable.
+            logged_at: set.completedAt ? new Date(set.completedAt).toISOString() : nowIso,
         }));
 
         await storage.workoutSessions.add(session);

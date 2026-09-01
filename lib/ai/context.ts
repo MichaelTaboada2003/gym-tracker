@@ -8,16 +8,19 @@
  *
  * The format, one exercise per block:
  *
- *     #Press Banca Plano|Pecho|3x6-8
- *     0d 82.5kgx8,8,7@8,8,9 e104
- *     3d 80kgx8,8,7 e101
- *     10d 80kgx8,8,6 e101
+ *     #Press Banca Plano|Pecho|3x6-8|desc150s
+ *     hace10d 80kgx8,8,6 e101
+ *     hace3d 80kgx8,8,7 e101 c151,155
+ *     HOY 82.5kgx8,8,7@8,8,9 e104 c162,148
  *
- * `0d` is today; `3d` means three days ago. Consecutive sets at the same weight
+ * Las líneas van de la más antigua a la de hoy, que cierra el bloque marcada
+ * como `HOY`. Consecutive sets at the same weight
  * collapse into one group (`82.5kgx8,8,7` = three sets at 82.5 kg). Mixed weights
  * are space-separated groups (`80kgx8 82.5kgx8 85kgx6`). `@` carries RPE, `bw`
  * means bodyweight, and `eNNN` is the estimated 1RM for that session —
  * precomputed because arithmetic is exactly what a model should not be doing.
+ * `cNN,NN` son los segundos entre series consecutivas, comparables con el
+ * `descNNNs` planificado de la cabecera.
  *
  * The legend lives in the system prompt, so it is paid for once per request
  * rather than repeated inside the data.
@@ -44,6 +47,30 @@ interface SetLine {
     weight: number;
     reps: number;
     rpe: number | null;
+    /** Epoch ms en que se marcó la serie, si se registró. */
+    at?: number;
+}
+
+/**
+ * Segundos entre series consecutivas.
+ *
+ * Mide descanso + ejecución juntos: solo hay un toque por serie, al terminarla,
+ * así que no existe forma de separarlos sin pedirle al usuario un segundo toque.
+ * Aun así es la señal que delata un descanso de 40 s donde la rutina pide 150.
+ *
+ * Devuelve `[]` cuando faltan marcas o son todas iguales — las sesiones
+ * anteriores a este cambio comparten un único timestamp y darían huecos de 0.
+ */
+function cycleGaps(sets: SetLine[]): number[] {
+    const stamps = sets.map((s) => s.at);
+    if (stamps.some((t) => !t)) return [];
+
+    const gaps: number[] = [];
+    for (let i = 1; i < stamps.length; i++) {
+        gaps.push(Math.round(((stamps[i] as number) - (stamps[i - 1] as number)) / 1000));
+    }
+    // Todo ceros = timestamps heredados, no un ritmo real.
+    return gaps.some((g) => g > 0) ? gaps : [];
 }
 
 /** Collapses consecutive same-weight sets: `82.5x8,8,7@8,8,9`. */
@@ -113,7 +140,12 @@ export async function buildAnalysisContext(sessionId: string): Promise<AnalysisC
             byExercise.set(log.exercise_id, perSession);
         }
         const bucket = perSession.get(log.session_id) ?? [];
-        bucket.push({ weight: Number(log.weight_kg) || 0, reps: log.reps || 0, rpe: log.rpe });
+        bucket.push({
+            weight: Number(log.weight_kg) || 0,
+            reps: log.reps || 0,
+            rpe: log.rpe,
+            at: log.logged_at ? Date.parse(log.logged_at) : undefined,
+        });
         perSession.set(log.session_id, bucket);
     }
 
@@ -128,11 +160,9 @@ export async function buildAnalysisContext(sessionId: string): Promise<AnalysisC
 
     // Routine targets, so the model can say "hiciste 2 de 3 series".
     const routine = session.routine_id ? routines.find((r) => r.id === session.routine_id) : undefined;
-    const targets = new Map(
-        routineExercises
-            .filter((re) => re.routine_id === session.routine_id)
-            .map((re) => [re.exercise_id, `${re.target_sets}x${re.target_reps}`])
-    );
+    const slots = routineExercises.filter((re) => re.routine_id === session.routine_id);
+    const targets = new Map(slots.map((re) => [re.exercise_id, `${re.target_sets}x${re.target_reps}`]));
+    const plannedRest = new Map(slots.map((re) => [re.exercise_id, re.rest_seconds]));
 
     const blocks: string[] = [];
     let hasHistory = false;
@@ -143,27 +173,46 @@ export async function buildAnalysisContext(sessionId: string): Promise<AnalysisC
         if (!exercise || !perSession) continue;
 
         const target = targets.get(exerciseId);
+        const planned = plannedRest.get(exerciseId);
         blocks.push(
-            `#${exercise.name}|${exercise.muscle_group}${target ? `|${target}` : ''}`
+            `#${exercise.name}|${exercise.muscle_group}` +
+                (target ? `|${target}` : '') +
+                (planned ? `|desc${planned}s` : '')
         );
 
-        // Today first, then the most recent history, newest to oldest.
         const ordered = Array.from(perSession.entries())
             .map(([id, sets]) => ({ id, date: sessionDate.get(id) ?? '', sets }))
             .filter((entry) => entry.date)
             .sort((a, b) => b.date.localeCompare(a.date));
 
-        const relevant = [
+        // Se seleccionan las más recientes...
+        const selected = [
             ...ordered.filter((entry) => entry.id === sessionId),
             ...ordered.filter((entry) => entry.id !== sessionId && entry.date <= session.session_date),
         ].slice(0, HISTORY_DEPTH + 1);
 
+        // ...pero se emiten de la más antigua a la de hoy.
+        //
+        // Con la sesión actual arriba, el modelo leía el bloque de arriba abajo
+        // como una cronología e invertía la tendencia: daba por progreso una
+        // regresión. El orden de lectura pesa más que cualquier aclaración en la
+        // leyenda, así que la línea de hoy va la última.
+        const relevant = selected.slice().reverse();
+
         if (relevant.length > 1) hasHistory = true;
 
         for (const entry of relevant) {
+            // "HOY" en vez de "0d": ninguna ambigüedad sobre cuál es la sesión
+            // que hay que juzgar.
             const age = daysBetween(entry.date, session.session_date);
+            const label = entry.id === sessionId ? 'HOY' : `hace${age}d`;
             const e1rm = bestE1RM(entry.sets);
-            blocks.push(`${age}d ${serialiseSets(entry.sets)}${e1rm > 0 ? ` e${e1rm}` : ''}`);
+            const gaps = cycleGaps(entry.sets);
+            blocks.push(
+                `${label} ${serialiseSets(entry.sets)}` +
+                    (e1rm > 0 ? ` e${e1rm}` : '') +
+                    (gaps.length > 0 ? ` c${gaps.join(',')}` : '')
+            );
         }
     }
 

@@ -24,8 +24,7 @@ const TRENDS: Record<Trend, { icon: React.ComponentProps<typeof Ionicons>['name'
 };
 
 export function AnalysisPanel({ sessionId }: AnalysisPanelProps) {
-    const { status, analysis, configured, context, error, model, tokensUsed, generate } =
-        useWorkoutAnalysis(sessionId);
+    const { status, analysis, configured, context, error, generate } = useWorkoutAnalysis(sessionId);
     const [showPayload, setShowPayload] = useState(false);
 
     return (
@@ -87,12 +86,6 @@ export function AnalysisPanel({ sessionId }: AnalysisPanelProps) {
                         <Text style={styles.summary}>{analysis.raw}</Text>
                     ) : null}
 
-                    {model ? (
-                        <Text style={styles.meta}>
-                            {model}
-                            {tokensUsed ? ` · ${tokensUsed} tokens` : ''}
-                        </Text>
-                    ) : null}
                 </>
             ) : (
                 <View style={styles.notice}>
@@ -103,8 +96,7 @@ export function AnalysisPanel({ sessionId }: AnalysisPanelProps) {
                     {context ? (
                         <Pressable onPress={() => setShowPayload((open) => !open)}>
                             <Text style={styles.meta}>
-                                ~{context.estimatedTokens} tokens · {context.exerciseCount} ejercicios ·{' '}
-                                {showPayload ? 'ocultar datos' : 'ver datos'}
+                                {showPayload ? 'Ocultar' : 'Ver'} los datos que se envían
                             </Text>
                         </Pressable>
                     ) : null}

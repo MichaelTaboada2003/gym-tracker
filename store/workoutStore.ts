@@ -25,6 +25,14 @@ export interface SetData {
     rpe: number | null;
     isWarmup: boolean;
     isCompleted: boolean;
+    /**
+     * Epoch ms del momento en que se marcó completada.
+     *
+     * Es la única señal temporal que existe: el usuario toca una vez, al
+     * terminar. Por eso el hueco entre dos series consecutivas mide descanso y
+     * ejecución juntos, y no se puede separar sin un segundo toque al empezar.
+     */
+    completedAt?: number;
     /** What this set number looked like in the previous session, for the "anterior" column. */
     previousWeight?: number;
     previousReps?: number;
@@ -282,9 +290,16 @@ export const useWorkoutStore = create<WorkoutState>()(
                     const current = target?.sets[setIndex];
                     if (!current) return state;
 
+                    const completing = !current.isCompleted;
                     const exercises = [...state.exercises];
                     const sets = [...target.sets];
-                    sets[setIndex] = { ...current, isCompleted: !current.isCompleted };
+                    sets[setIndex] = {
+                        ...current,
+                        isCompleted: completing,
+                        // Al desmarcar se borra: una marca de tiempo de una serie
+                        // que ya no cuenta falsearía el ritmo de la sesión.
+                        completedAt: completing ? Date.now() : undefined,
+                    };
                     exercises[exerciseIndex] = { ...target, sets };
                     return { exercises };
                 }),
