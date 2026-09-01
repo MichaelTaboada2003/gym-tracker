@@ -26,7 +26,13 @@ import {
     WorkoutLog,
     WorkoutSession,
 } from './database.types';
-import { SEED_EXERCISES, SEED_ROUTINES, SEED_ROUTINE_EXERCISES } from './seedData';
+import {
+    SEED_EXERCISES,
+    SEED_PLANS,
+    SEED_PLAN_ROUTINES,
+    SEED_ROUTINES,
+    SEED_ROUTINE_EXERCISES,
+} from './seedData';
 
 export const STORAGE_KEYS = {
     EXERCISES: '@gym_tracker_exercises',
@@ -356,7 +362,7 @@ function normaliseSeedRoutineExercise(raw: (typeof SEED_ROUTINE_EXERCISES)[numbe
     };
 }
 
-/** Writes the bundled starter catalogue. Existing rows are replaced. */
+/** Writes the bundled starter catalogue: ejercicios, rutinas y el programa PPL. Existing rows are replaced. */
 export const seedDatabase = async (): Promise<void> => {
     const now = new Date().toISOString();
     await saveAll(
@@ -368,6 +374,14 @@ export const seedDatabase = async (): Promise<void> => {
         SEED_ROUTINES.map((r) => ({ ...r, description: r.description ?? null, created_at: now, updated_at: now }))
     );
     await saveAll(STORAGE_KEYS.ROUTINE_EXERCISES, SEED_ROUTINE_EXERCISES.map(normaliseSeedRoutineExercise));
+    await saveAll(
+        STORAGE_KEYS.PLANS,
+        SEED_PLANS.map((plan) => ({ ...plan, created_at: now, updated_at: now }))
+    );
+    await saveAll(
+        STORAGE_KEYS.PLAN_ROUTINES,
+        SEED_PLAN_ROUTINES.map((row) => ({ ...row, created_at: now }))
+    );
 };
 
 // =============================================================================
@@ -378,7 +392,7 @@ export const seedDatabase = async (): Promise<void> => {
  * Ordered, idempotent-by-version migrations. Bump `SCHEMA_VERSION` and append a
  * step; everything below the stored version is skipped on later launches.
  */
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 const MIGRATIONS: Record<number, () => Promise<void>> = {
     /**
@@ -475,6 +489,68 @@ const MIGRATIONS: Record<number, () => Promise<void>> = {
         if (byDate.size !== weights.length) {
             await saveAll(STORAGE_KEYS.BODY_WEIGHT, Array.from(byDate.values()));
         }
+    },
+
+    /**
+     * v3 — restaura el programa de fábrica perdido al retirar Supabase.
+     *
+     * El PPL vivía en `007_create_training_plans.sql` y se borró junto con el
+     * resto de Supabase sin portarlo al sembrado local, así que las
+     * instalaciones existentes se quedaron con la sección de Programas vacía
+     * pese a tener las seis rutinas que lo componen.
+     *
+     * Solo actúa si no hay ningún programa: quien haya creado los suyos, o
+     * borrado este a propósito, no se lo encuentra de vuelta.
+     */
+    3: async () => {
+        const plans = await storage.plans.getAll();
+        if (plans.length > 0) return;
+
+        const routines = await storage.routines.getAll();
+        // Búsqueda por nombre, como hacía el SQL: los ids locales de cada
+        // instalación no coinciden con los que genera seedData.
+        const findRoutine = (marker: string) =>
+            routines.find((r) => r.name.toUpperCase().includes(marker));
+
+        const days: { marker: string; day: number }[] = [
+            { marker: 'PUSH A', day: 1 },
+            { marker: 'PULL A', day: 2 },
+            { marker: 'LEGS A', day: 3 },
+            // El día 4 es descanso: se omite a propósito.
+            { marker: 'PUSH B', day: 5 },
+            { marker: 'PULL B', day: 6 },
+            { marker: 'LEGS B', day: 7 },
+        ];
+
+        const matched = days
+            .map(({ marker, day }) => ({ routine: findRoutine(marker), day }))
+            .filter((entry): entry is { routine: Routine; day: number } => entry.routine != null);
+
+        // Sin las rutinas de fábrica el programa quedaría vacío: mejor no crearlo.
+        if (matched.length === 0) return;
+
+        const now = new Date().toISOString();
+        const template = SEED_PLANS[0];
+        const planId = generateId();
+
+        await storage.plans.add({
+            id: planId,
+            name: template.name,
+            description: template.description,
+            duration_days: template.duration_days,
+            created_at: now,
+            updated_at: now,
+        });
+        await storage.planRoutines.addMany(
+            matched.map(({ routine, day }) => ({
+                id: generateId(),
+                plan_id: planId,
+                routine_id: routine.id,
+                day_number: day,
+                notes: null,
+                created_at: now,
+            }))
+        );
     },
 };
 

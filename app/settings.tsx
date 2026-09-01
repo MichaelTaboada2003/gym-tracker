@@ -105,7 +105,7 @@ export default function SettingsScreen() {
         showConfirm({
             title: 'Restaurar catálogo',
             message:
-                'Se reemplazarán los ejercicios y rutinas por los de fábrica. Tu historial de entrenamientos y tu peso corporal no se tocan.',
+                'Se reemplazarán los ejercicios, las rutinas y los programas por los de fábrica. Tu historial de entrenamientos y tu peso corporal no se tocan.',
             confirmLabel: 'Restaurar',
             onConfirm: async () => {
                 setBusy(true);

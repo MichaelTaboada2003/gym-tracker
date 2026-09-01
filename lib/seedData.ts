@@ -44,6 +44,9 @@ const ids = {
         seatedLegCurl: generateId(),
         seatedCalf: generateId(),
     },
+    plans: {
+        ppl: generateId(),
+    },
     routines: {
         pushA: generateId(),
         pullA: generateId(),
@@ -155,4 +158,34 @@ export const SEED_ROUTINE_EXERCISES = [
     { id: generateId(), routine_id: ids.routines.legsB, exercise_id: ids.exercises.legExt, order_index: 2, target_sets: 3, target_reps: '12-15 + Drop', rest_seconds: 90, notes: 'Descanso: 90s. Drop set al final: baja peso 50% y al fallo.' },
     { id: generateId(), routine_id: ids.routines.legsB, exercise_id: ids.exercises.seatedLegCurl, order_index: 3, target_sets: 3, target_reps: '12-15', rest_seconds: 75, notes: 'Descanso: 60-90s.' },
     { id: generateId(), routine_id: ids.routines.legsB, exercise_id: ids.exercises.seatedCalf, order_index: 4, target_sets: 4, target_reps: '15-20', rest_seconds: 60, notes: 'Descanso: 60s.' },
+];
+
+/**
+ * Programa de fábrica: el PPL de frecuencia 2 que las seis rutinas ya componen.
+ *
+ * Venía de `supabase/migrations/007_create_training_plans.sql` y se perdió al
+ * retirar Supabase, porque ese SQL nunca se portó al sembrado local. Sin él, la
+ * sección de Programas aparecía vacía pese a existir toda su maquinaria.
+ */
+export const SEED_PLANS = [
+    {
+        id: ids.plans.ppl,
+        name: 'Push Pull Legs (Frecuencia 2)',
+        description:
+            'Rutina de 6 días enfocada en hipertrofia y fuerza. Divide el cuerpo en patrones de movimiento: Empuje, Tracción y Pierna.',
+        duration_days: 7,
+    },
+];
+
+/**
+ * Días del programa. El 4 se omite a propósito: es el descanso, y se representa
+ * como un hueco igual que en el SQL original.
+ */
+export const SEED_PLAN_ROUTINES = [
+    { id: generateId(), plan_id: ids.plans.ppl, routine_id: ids.routines.pushA, day_number: 1, notes: null },
+    { id: generateId(), plan_id: ids.plans.ppl, routine_id: ids.routines.pullA, day_number: 2, notes: null },
+    { id: generateId(), plan_id: ids.plans.ppl, routine_id: ids.routines.legsA, day_number: 3, notes: null },
+    { id: generateId(), plan_id: ids.plans.ppl, routine_id: ids.routines.pushB, day_number: 5, notes: null },
+    { id: generateId(), plan_id: ids.plans.ppl, routine_id: ids.routines.pullB, day_number: 6, notes: null },
+    { id: generateId(), plan_id: ids.plans.ppl, routine_id: ids.routines.legsB, day_number: 7, notes: null },
 ];

@@ -67,7 +67,7 @@ export function PlanCard({ plan, onPress, onLongPress }: PlanCardProps) {
                         <View style={styles.statItem}>
                             <Ionicons name="barbell" size={13} color={COLORS.textSecondary} />
                             <Text style={styles.statText}>
-                                {plan.duration_days || 7} Días
+                                {plan.duration_days || 7} días
                             </Text>
                         </View>
 

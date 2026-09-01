@@ -200,7 +200,7 @@ export default function PlanDetailsScreen() {
                 {/* Routines List */}
                 <View style={styles.routinesSection}>
                     <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Rutinas del Programa</Text>
+                        <Text style={styles.sectionTitle}>Rutinas del programa</Text>
                         <View style={styles.sectionBadge}>
                             <Text style={styles.sectionBadgeText}>{plan.items.length}</Text>
                         </View>
