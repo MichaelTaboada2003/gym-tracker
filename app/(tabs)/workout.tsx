@@ -153,6 +153,7 @@ export default function WorkoutScreen() {
                 }
 
                 setSummary({
+                    sessionId: saved.session.id,
                     routineName: snapshot.routineName,
                     duration: saved.session.duration_minutes ?? durationMinutes,
                     exercises: snapshot.exercises,

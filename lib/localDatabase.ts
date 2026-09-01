@@ -21,6 +21,7 @@ import {
     PlanRoutine,
     Routine,
     RoutineExercise,
+    SessionAnalysis,
     WeightLog,
     WorkoutLog,
     WorkoutSession,
@@ -37,6 +38,7 @@ export const STORAGE_KEYS = {
     WORKOUT_LOGS: '@gym_tracker_workout_logs',
     BODY_WEIGHT: '@gym_tracker_body_weight',
     ACTIVE_WORKOUT: '@gym_tracker_active_workout',
+    ANALYSES: '@gym_tracker_session_analyses',
     SETTINGS: '@gym_tracker_settings',
 } as const;
 
@@ -265,6 +267,23 @@ export const storage = {
             deleteWhere<WorkoutLog>(STORAGE_KEYS.WORKOUT_LOGS, (row) => row.exercise_id === exerciseId),
     },
 
+    analyses: {
+        getAll: () => getAll<SessionAnalysis>(STORAGE_KEYS.ANALYSES),
+        /** One analysis per session: a re-run replaces the previous verdict. */
+        upsert: (item: SessionAnalysis) =>
+            replaceWhere<SessionAnalysis>(
+                STORAGE_KEYS.ANALYSES,
+                (row) => row.session_id === item.session_id,
+                [item]
+            ),
+        getBySessionId: async (sessionId: string) =>
+            (await getAll<SessionAnalysis>(STORAGE_KEYS.ANALYSES)).find(
+                (row) => row.session_id === sessionId
+            ) ?? null,
+        deleteBySessionId: (sessionId: string) =>
+            deleteWhere<SessionAnalysis>(STORAGE_KEYS.ANALYSES, (row) => row.session_id === sessionId),
+    },
+
     bodyWeight: {
         getAll: () => getAll<WeightLog>(STORAGE_KEYS.BODY_WEIGHT),
         saveAll: (rows: WeightLog[]) => saveAll(STORAGE_KEYS.BODY_WEIGHT, rows),
@@ -295,9 +314,10 @@ export async function deletePlanCascade(planId: string): Promise<void> {
     await storage.plans.delete(planId);
 }
 
-/** Removes a session and every set logged inside it. */
+/** Removes a session, every set logged inside it, and its saved analysis. */
 export async function deleteSessionCascade(sessionId: string): Promise<void> {
     await storage.workoutLogs.deleteBySessionId(sessionId);
+    await storage.analyses.deleteBySessionId(sessionId);
     await storage.workoutSessions.delete(sessionId);
 }
 

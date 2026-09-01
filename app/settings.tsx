@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
+import { AiSettings } from '../components/settings/AiSettings';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/colors';
 import { FONTS } from '../constants/typography';
 import { clearAllData, seedDatabase, storage } from '../lib/localDatabase';
