@@ -7,6 +7,7 @@ import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, getMuscleColor } from '../.
 import { FONTS } from '../../constants/typography';
 import { Card } from '../../components/ui/Card';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { AnalysisPanel } from '../../components/workout/AnalysisPanel';
 import { useRefreshOnFocus } from '../../hooks/useRefreshOnFocus';
 import { storage, deleteSessionCascade } from '../../lib/localDatabase';
 import { formatLongDate, formatMinutes, formatVolume, formatVolumeShort, toISODate } from '../../lib/utils';
@@ -292,6 +293,14 @@ export default function CalendarScreen() {
                                         </View>
                                     </View>
                                 ))}
+
+                                {/* Past sessions can be analysed too — the verdict
+                                    is saved, so opening a day again is free. */}
+                                {selectedDayWorkout.sessions.map((session) => (
+                                    <View key={`analysis-${session.id}`} style={styles.analysisBlock}>
+                                        <AnalysisPanel sessionId={session.id} />
+                                    </View>
+                                ))}
                             </View>
                         ) : (
                             <View style={styles.emptyState}>
@@ -393,6 +402,9 @@ const styles = StyleSheet.create({
         fontSize: FONT_SIZES.sm,
         color: COLORS.primary,
         fontFamily: FONTS.semibold,
+    },
+    analysisBlock: {
+        marginTop: SPACING.md,
     },
     exercisesTitle: {
         fontSize: FONT_SIZES.md,
