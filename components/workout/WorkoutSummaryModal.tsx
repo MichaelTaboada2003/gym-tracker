@@ -8,7 +8,6 @@ import { ExerciseInProgress } from '../../store/workoutStore';
 import { PersonalRecord } from '../../hooks/useWorkoutSession';
 import { formatMinutes, formatVolumeShort, formatWeight } from '../../lib/utils';
 import { Button } from '../ui/Button';
-import { AnalysisPanel } from './AnalysisPanel';
 
 export interface WorkoutSummaryData {
     /** The saved session, so the analysis can be attached to it. */
@@ -188,10 +187,6 @@ export function WorkoutSummaryModal({ visible, data, onClose }: WorkoutSummaryMo
                             ))}
                         </View>
                     )}
-
-                    <View style={styles.section}>
-                        <AnalysisPanel sessionId={data.sessionId} />
-                    </View>
 
                     {/* Exercise Breakdown */}
                     <View style={styles.section}>

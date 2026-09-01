@@ -4,11 +4,9 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
-import { AiSettings } from '../components/settings/AiSettings';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/colors';
 import { FONTS } from '../constants/typography';
 import { clearAllData, seedDatabase, storage } from '../lib/localDatabase';
-import { generateDemoData } from '../lib/generateDemoData';
 import { useWorkoutStore } from '../store/workoutStore';
 import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import { formatVolume } from '../lib/utils';
@@ -118,31 +116,6 @@ export default function SettingsScreen() {
         });
     };
 
-    const loadDemo = () => {
-        showConfirm({
-            title: 'Cargar datos de prueba',
-            message:
-                'Se generarán 2 meses de entrenamientos (más de 40 sesiones), series con sobrecarga progresiva, métricas de peso corporal y programas de entrenamiento.',
-            confirmLabel: 'Generar datos',
-            onConfirm: async () => {
-                setBusy(true);
-                try {
-                    const result = await generateDemoData();
-                    await load();
-                    showAlert(
-                        '¡Datos generados!',
-                        `Se cargaron con éxito:\n• ${result.sessionsCount} entrenamientos\n• ${result.logsCount} series registradas\n• ${result.weightsCount} registros de peso corporal\n• ${result.plansCount} programas de entrenamiento`
-                    );
-                } catch (err) {
-                    console.error('[settings] demo data error:', err);
-                    showAlert('Error', 'No se pudieron generar los datos de prueba.');
-                } finally {
-                    setBusy(false);
-                }
-            },
-        });
-    };
-
     const wipe = () => {
         showConfirm({
             title: 'Borrar todos los datos',
@@ -184,15 +157,8 @@ export default function SettingsScreen() {
                     <StatRow label="Volumen acumulado" value={formatVolume(counts.volume)} last />
                 </View>
 
-                <Text style={styles.sectionLabel}>Datos y Pruebas</Text>
+                <Text style={styles.sectionLabel}>Copia de seguridad</Text>
                 <View style={styles.card}>
-                    <ActionRow
-                        icon="sparkles-outline"
-                        title="Cargar datos de prueba (Demo)"
-                        subtitle="60 días de entrenamientos, peso y métricas"
-                        onPress={loadDemo}
-                        disabled={busy}
-                    />
                     <ActionRow
                         icon="share-outline"
                         title="Exportar datos"
