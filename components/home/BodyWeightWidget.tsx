@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, ScrollView } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -9,6 +9,7 @@ import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { useBodyWeight, DateRange } from '../../hooks/useBodyWeight';
 import { parseISODate } from '../../lib/utils';
+import { showAlert, showConfirm } from '../../lib/dialog';
 
 const DATE_RANGE_OPTIONS: { key: DateRange; label: string }[] = [
     { key: '7d', label: '7D' },
@@ -84,13 +85,13 @@ export const BodyWeightWidget = () => {
     const handleAddWeight = async () => {
         const weight = parseFloat(newWeight.replace(',', '.'));
         if (!Number.isFinite(weight) || weight <= 0 || weight > 500) {
-            Alert.alert('Peso no válido', 'Introduce un peso entre 1 y 500 kg.');
+            showAlert('Peso no válido', 'Introduce un peso entre 1 y 500 kg.');
             return;
         }
 
         const saved = await addWeightLog(weight);
         if (!saved) {
-            Alert.alert('Error', 'No se pudo guardar el peso.');
+            showAlert('Error', 'No se pudo guardar el peso.');
             return;
         }
         setNewWeight('');
@@ -99,10 +100,12 @@ export const BodyWeightWidget = () => {
 
     /** Long-press on a history row: the only way to correct a mistyped entry. */
     const confirmDelete = (id: string, label: string) => {
-        Alert.alert('Eliminar registro', `¿Borrar el peso de ${label}?`, [
-            { text: 'Cancelar', style: 'cancel' },
-            { text: 'Eliminar', style: 'destructive', onPress: () => deleteWeightLog(id) },
-        ]);
+        showConfirm({
+            title: 'Eliminar registro',
+            message: `¿Borrar el peso de ${label}?`,
+            confirmLabel: 'Eliminar',
+            onConfirm: () => deleteWeightLog(id),
+        });
     };
 
     const formatChange = (change: number) => {
@@ -598,7 +601,8 @@ const styles = StyleSheet.create({
         color: COLORS.textSecondary,
     },
     rangeButtonTextActive: {
-        color: COLORS.textPrimary,
+        // Chalk pill, iron ink — `textPrimary` here was chalk on chalk.
+        color: COLORS.onChalk,
     },
     statsGrid: {
         flexDirection: 'row',

@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Share } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Share } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
@@ -7,9 +7,11 @@ import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/colors';
 import { FONTS } from '../constants/typography';
 import { clearAllData, seedDatabase, storage } from '../lib/localDatabase';
+import { generateDemoData } from '../lib/generateDemoData';
 import { useWorkoutStore } from '../store/workoutStore';
 import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import { formatVolume } from '../lib/utils';
+import { showAlert, showConfirm } from '../lib/dialog';
 
 interface Counts {
     exercises: number;
@@ -93,64 +95,77 @@ export default function SettingsScreen() {
             await Share.share({ message: payload, title: 'Copia de seguridad — Gym Tracker' });
         } catch (error) {
             console.error('[settings] export failed:', error);
-            Alert.alert('Error', 'No se pudo generar la copia de seguridad.');
+            showAlert('Error', 'No se pudo generar la copia de seguridad.');
         } finally {
             setBusy(false);
         }
     };
 
     const restoreCatalogue = () => {
-        Alert.alert(
-            'Restaurar catálogo',
-            'Se reemplazarán los ejercicios y rutinas por los de fábrica. Tu historial de entrenamientos y tu peso corporal no se tocan.',
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                    text: 'Restaurar',
-                    style: 'destructive',
-                    onPress: async () => {
-                        setBusy(true);
-                        await seedDatabase();
-                        await load();
-                        setBusy(false);
-                        Alert.alert('Listo', 'Catálogo restaurado.');
-                    },
-                },
-            ]
-        );
+        showConfirm({
+            title: 'Restaurar catálogo',
+            message:
+                'Se reemplazarán los ejercicios y rutinas por los de fábrica. Tu historial de entrenamientos y tu peso corporal no se tocan.',
+            confirmLabel: 'Restaurar',
+            onConfirm: async () => {
+                setBusy(true);
+                await seedDatabase();
+                await load();
+                setBusy(false);
+                showAlert('Listo', 'Catálogo restaurado.');
+            },
+        });
+    };
+
+    const loadDemo = () => {
+        showConfirm({
+            title: 'Cargar datos de prueba',
+            message:
+                'Se generarán 2 meses de entrenamientos (más de 40 sesiones), series con sobrecarga progresiva, métricas de peso corporal y programas de entrenamiento.',
+            confirmLabel: 'Generar datos',
+            onConfirm: async () => {
+                setBusy(true);
+                try {
+                    const result = await generateDemoData();
+                    await load();
+                    showAlert(
+                        '¡Datos generados!',
+                        `Se cargaron con éxito:\n• ${result.sessionsCount} entrenamientos\n• ${result.logsCount} series registradas\n• ${result.weightsCount} registros de peso corporal\n• ${result.plansCount} programas de entrenamiento`
+                    );
+                } catch (err) {
+                    console.error('[settings] demo data error:', err);
+                    showAlert('Error', 'No se pudieron generar los datos de prueba.');
+                } finally {
+                    setBusy(false);
+                }
+            },
+        });
     };
 
     const wipe = () => {
-        Alert.alert(
-            'Borrar todos los datos',
-            'Se eliminarán ejercicios, rutinas, programas, entrenamientos y registros de peso. Esta acción no se puede deshacer.',
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                    text: 'Borrar todo',
-                    style: 'destructive',
-                    onPress: () =>
-                        Alert.alert('¿Seguro?', 'Última confirmación antes de borrar todo.', [
-                            { text: 'Cancelar', style: 'cancel' },
-                            {
-                                text: 'Sí, borrar',
-                                style: 'destructive',
-                                onPress: async () => {
-                                    setBusy(true);
-                                    // The live session lives in memory too; leaving it
-                                    // running would re-save data referencing wiped rows.
-                                    useWorkoutStore.getState().endWorkout();
-                                    await clearAllData();
-                                    await seedDatabase();
-                                    await load();
-                                    setBusy(false);
-                                    Alert.alert('Hecho', 'Se restauró la app a su estado inicial.');
-                                },
-                            },
-                        ]),
-                },
-            ]
-        );
+        showConfirm({
+            title: 'Borrar todos los datos',
+            message:
+                'Se eliminarán ejercicios, rutinas, programas, entrenamientos y registros de peso. Esta acción no se puede deshacer.',
+            confirmLabel: 'Borrar todo',
+            onConfirm: () =>
+                showConfirm({
+                    title: '¿Seguro?',
+                    message: 'Última confirmación antes de borrar todo.',
+                    confirmLabel: 'Sí, borrar',
+                    onConfirm: async () => {
+                        setBusy(true);
+                        // The live session lives in memory too; leaving it running
+                        // would re-save data referencing wiped rows.
+                        useWorkoutStore.getState().endWorkout();
+                        await clearAllData();
+                        await seedDatabase();
+                        await load();
+                        setBusy(false);
+                        showAlert('Hecho', 'Se restauró la app a su estado inicial.');
+                    },
+                }),
+        });
     };
 
     return (
@@ -168,8 +183,15 @@ export default function SettingsScreen() {
                     <StatRow label="Volumen acumulado" value={formatVolume(counts.volume)} last />
                 </View>
 
-                <Text style={styles.sectionLabel}>Copia de seguridad</Text>
+                <Text style={styles.sectionLabel}>Datos y Pruebas</Text>
                 <View style={styles.card}>
+                    <ActionRow
+                        icon="sparkles-outline"
+                        title="Cargar datos de prueba (Demo)"
+                        subtitle="60 días de entrenamientos, peso y métricas"
+                        onPress={loadDemo}
+                        disabled={busy}
+                    />
                     <ActionRow
                         icon="share-outline"
                         title="Exportar datos"

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,6 +11,7 @@ import { Button } from '../../components/ui/Button';
 import { CreateRoutineModal } from '../../components/routines/CreateRoutineModal';
 import { useRoutines, RoutineWithExercises } from '../../hooks/useRoutines';
 import { formatMinutes, formatSeconds } from '../../lib/utils';
+import { showConfirm, showDialog } from '../../lib/dialog';
 
 export default function RoutineDetailScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
@@ -37,37 +38,35 @@ export default function RoutineDetailScreen() {
 
     const openMenu = () => {
         if (!routine) return;
-        Alert.alert(routine.name, undefined, [
-            { text: 'Editar', onPress: () => setEditing(true) },
-            {
-                text: 'Duplicar',
-                onPress: async () => {
-                    const copy = await duplicateRoutine(routine.id);
-                    if (copy) router.replace(`/routine/${copy.id}`);
+        showDialog({
+            title: routine.name,
+            actions: [
+                { label: 'Editar', onPress: () => setEditing(true) },
+                {
+                    label: 'Duplicar',
+                    onPress: async () => {
+                        const copy = await duplicateRoutine(routine.id);
+                        if (copy) router.replace(`/routine/${copy.id}`);
+                    },
                 },
-            },
-            {
-                text: 'Eliminar',
-                style: 'destructive',
-                onPress: () =>
-                    Alert.alert(
-                        'Eliminar rutina',
-                        'Se quitará también de los programas que la usen. El historial se conserva.',
-                        [
-                            { text: 'Cancelar', style: 'cancel' },
-                            {
-                                text: 'Eliminar',
-                                style: 'destructive',
-                                onPress: async () => {
-                                    await deleteRoutine(routine.id);
-                                    goBack();
-                                },
+                {
+                    label: 'Eliminar',
+                    style: 'destructive',
+                    onPress: () =>
+                        showConfirm({
+                            title: 'Eliminar rutina',
+                            message:
+                                'Se quitará también de los programas que la usen. El historial se conserva.',
+                            confirmLabel: 'Eliminar',
+                            onConfirm: async () => {
+                                await deleteRoutine(routine.id);
+                                goBack();
                             },
-                        ]
-                    ),
-            },
-            { text: 'Cancelar', style: 'cancel' },
-        ]);
+                        }),
+                },
+                { label: 'Cancelar', style: 'cancel' },
+            ],
+        });
     };
 
     if (loading) {

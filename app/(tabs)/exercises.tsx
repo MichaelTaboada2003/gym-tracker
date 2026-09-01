@@ -9,7 +9,6 @@ import {
     Modal,
     FlatList,
     RefreshControl,
-    Alert,
     KeyboardAvoidingView,
     Platform,
 } from 'react-native';
@@ -25,6 +24,7 @@ import { useExercises, ExerciseDraft } from '../../hooks/useExercises';
 import { useRefreshOnFocus } from '../../hooks/useRefreshOnFocus';
 import { Exercise } from '../../lib/database.types';
 import { formatEquipment, formatSeconds } from '../../lib/utils';
+import { showAlert, showConfirm } from '../../lib/dialog';
 
 const MUSCLE_GROUPS = ['Pecho', 'Espalda', 'Hombros', 'Bíceps', 'Tríceps', 'Piernas', 'Glúteos', 'Core', 'Cardio'];
 const EQUIPMENT_OPTIONS = ['Barra', 'Mancuernas', 'Máquina', 'Polea', 'Peso corporal', 'Kettlebell', 'Bandas'];
@@ -89,11 +89,11 @@ export default function ExercisesScreen() {
     }, [exercises]);
 
     /**
-     * Confirms with `Alert`, not `window.confirm`.
+     * Confirms through the in-app dialog.
      *
-     * React Native defines a `window` global but no `confirm` on it, so the old
-     * `if (typeof window !== 'undefined') window.confirm(...)` threw a TypeError
-     * on device — deleting an exercise crashed the screen every time.
+     * This first used `window.confirm`, which throws on device (React Native
+     * defines `window` but no `confirm` on it), then `Alert.alert`, which is a
+     * no-op on web. `showConfirm` behaves the same everywhere.
      */
     const confirmDelete = async (exercise: Exercise) => {
         const usages = await countRoutineUsages(exercise.id);
@@ -102,18 +102,12 @@ export default function ExercisesScreen() {
                 ? `Se quitará de ${usages} ${usages === 1 ? 'rutina' : 'rutinas'}. `
                 : '';
 
-        Alert.alert(
-            'Eliminar ejercicio',
-            `${warning}El historial de series que ya registraste se conserva.`,
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                    text: 'Eliminar',
-                    style: 'destructive',
-                    onPress: () => deleteExercise(exercise.id),
-                },
-            ]
-        );
+        showConfirm({
+            title: 'Eliminar ejercicio',
+            message: `${warning}El historial de series que ya registraste se conserva.`,
+            confirmLabel: 'Eliminar',
+            onConfirm: () => deleteExercise(exercise.id),
+        });
     };
 
     return (
@@ -340,11 +334,11 @@ function ExerciseEditor({
 
     const submit = async () => {
         if (!form.name.trim()) {
-            Alert.alert('Falta el nombre', 'Escribe cómo se llama el ejercicio.');
+            showAlert('Falta el nombre', 'Escribe cómo se llama el ejercicio.');
             return;
         }
         if (!form.muscleGroup) {
-            Alert.alert('Falta el grupo muscular', 'Elige a qué músculo pertenece.');
+            showAlert('Falta el grupo muscular', 'Elige a qué músculo pertenece.');
             return;
         }
 
@@ -360,7 +354,7 @@ function ExerciseEditor({
             });
             onClose();
         } catch (error) {
-            Alert.alert('No se pudo guardar', error instanceof Error ? error.message : 'Inténtalo de nuevo.');
+            showAlert('No se pudo guardar', error instanceof Error ? error.message : 'Inténtalo de nuevo.');
         } finally {
             setSaving(false);
         }

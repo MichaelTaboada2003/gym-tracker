@@ -104,6 +104,6 @@ const styles = StyleSheet.create({
         marginBottom: SPACING.md,
     },
     textWhite: {
-        color: '#FFFFFF',
+        color: COLORS.textPrimary,
     },
 });

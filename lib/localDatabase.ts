@@ -228,6 +228,8 @@ export const storage = {
         getAll: () => getAll<Plan>(STORAGE_KEYS.PLANS),
         getById: (id: string) => getById<Plan>(STORAGE_KEYS.PLANS, id),
         add: (item: Plan) => addItem(STORAGE_KEYS.PLANS, item),
+        addMany: (items: Plan[]) => addMany(STORAGE_KEYS.PLANS, items),
+        saveAll: (rows: Plan[]) => saveAll(STORAGE_KEYS.PLANS, rows),
         update: (id: string, updates: Partial<Plan>) => updateItem<Plan>(STORAGE_KEYS.PLANS, id, updates),
         delete: (id: string) => deleteItem(STORAGE_KEYS.PLANS, id),
     },
@@ -247,6 +249,8 @@ export const storage = {
         getAll: () => getAll<WorkoutSession>(STORAGE_KEYS.WORKOUT_SESSIONS),
         getById: (id: string) => getById<WorkoutSession>(STORAGE_KEYS.WORKOUT_SESSIONS, id),
         add: (item: WorkoutSession) => addItem(STORAGE_KEYS.WORKOUT_SESSIONS, item),
+        addMany: (items: WorkoutSession[]) => addMany(STORAGE_KEYS.WORKOUT_SESSIONS, items),
+        saveAll: (rows: WorkoutSession[]) => saveAll(STORAGE_KEYS.WORKOUT_SESSIONS, rows),
         update: (id: string, updates: Partial<WorkoutSession>) =>
             updateItem<WorkoutSession>(STORAGE_KEYS.WORKOUT_SESSIONS, id, updates),
         delete: (id: string) => deleteItem(STORAGE_KEYS.WORKOUT_SESSIONS, id),

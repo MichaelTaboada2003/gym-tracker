@@ -588,6 +588,6 @@ const styles = StyleSheet.create({
     emptyButtonText: {
         fontSize: FONT_SIZES.sm,
         fontFamily: FONTS.semibold,
-        color: '#FFF',
+        color: COLORS.onChalk,
     },
 });

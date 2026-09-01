@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, getMuscleColor } from '../../constants/colors';
@@ -12,6 +12,7 @@ import { PlanCard } from '../../components/plans/PlanCard';
 import { useRoutines, RoutineWithExercises } from '../../hooks/useRoutines';
 import { usePlans, PlanWithRoutines } from '../../hooks/usePlans';
 import { useRefreshOnFocus } from '../../hooks/useRefreshOnFocus';
+import { showConfirm, showDialog } from '../../lib/dialog';
 
 export default function RoutinesScreen() {
     const router = useRouter();
@@ -43,63 +44,65 @@ export default function RoutinesScreen() {
     useRefreshOnFocus(refresh);
 
     const openRoutineMenu = (routine: RoutineWithExercises) => {
-        Alert.alert(routine.name, undefined, [
-            { text: 'Empezar entrenamiento', onPress: () => router.navigate(`/workout?routineId=${routine.id}`) },
-            { text: 'Editar', onPress: () => setRoutineModal({ open: true, editing: routine }) },
-            {
-                text: 'Duplicar',
-                onPress: async () => {
-                    await duplicateRoutine(routine.id);
+        showDialog({
+            title: routine.name,
+            actions: [
+                {
+                    label: 'Empezar entrenamiento',
+                    onPress: () => router.navigate(`/workout?routineId=${routine.id}`),
                 },
-            },
-            {
-                text: 'Eliminar',
-                style: 'destructive',
-                onPress: () =>
-                    Alert.alert(
-                        'Eliminar rutina',
-                        `Se eliminará "${routine.name}" y se quitará de los programas que la usen. El historial de entrenamientos se conserva.`,
-                        [
-                            { text: 'Cancelar', style: 'cancel' },
-                            {
-                                text: 'Eliminar',
-                                style: 'destructive',
-                                onPress: async () => {
-                                    await deleteRoutine(routine.id);
-                                    await fetchPlans();
-                                },
+                { label: 'Editar', onPress: () => setRoutineModal({ open: true, editing: routine }) },
+                {
+                    label: 'Duplicar',
+                    onPress: async () => {
+                        await duplicateRoutine(routine.id);
+                    },
+                },
+                {
+                    label: 'Eliminar',
+                    style: 'destructive',
+                    onPress: () =>
+                        showConfirm({
+                            title: 'Eliminar rutina',
+                            message: `Se eliminará "${routine.name}" y se quitará de los programas que la usen. El historial de entrenamientos se conserva.`,
+                            confirmLabel: 'Eliminar',
+                            onConfirm: async () => {
+                                await deleteRoutine(routine.id);
+                                await fetchPlans();
                             },
-                        ]
-                    ),
-            },
-            { text: 'Cancelar', style: 'cancel' },
-        ]);
+                        }),
+                },
+                { label: 'Cancelar', style: 'cancel' },
+            ],
+        });
     };
 
     const openPlanMenu = async (planId: string, planName: string) => {
-        Alert.alert(planName, undefined, [
-            {
-                text: 'Ver programa',
-                onPress: () => router.push(`/plan/${planId}`),
-            },
-            {
-                text: 'Editar',
-                onPress: async () => {
-                    const details = await getPlanDetails(planId);
-                    if (details) setPlanModal({ open: true, editing: details });
+        showDialog({
+            title: planName,
+            actions: [
+                { label: 'Ver programa', onPress: () => router.push(`/plan/${planId}`) },
+                {
+                    label: 'Editar',
+                    onPress: async () => {
+                        const details = await getPlanDetails(planId);
+                        if (details) setPlanModal({ open: true, editing: details });
+                    },
                 },
-            },
-            {
-                text: 'Eliminar',
-                style: 'destructive',
-                onPress: () =>
-                    Alert.alert('Eliminar programa', `¿Eliminar "${planName}"? Las rutinas se conservan.`, [
-                        { text: 'Cancelar', style: 'cancel' },
-                        { text: 'Eliminar', style: 'destructive', onPress: () => deletePlan(planId) },
-                    ]),
-            },
-            { text: 'Cancelar', style: 'cancel' },
-        ]);
+                {
+                    label: 'Eliminar',
+                    style: 'destructive',
+                    onPress: () =>
+                        showConfirm({
+                            title: 'Eliminar programa',
+                            message: `¿Eliminar "${planName}"? Las rutinas se conservan.`,
+                            confirmLabel: 'Eliminar',
+                            onConfirm: () => deletePlan(planId),
+                        }),
+                },
+                { label: 'Cancelar', style: 'cancel' },
+            ],
+        });
     };
 
     return (

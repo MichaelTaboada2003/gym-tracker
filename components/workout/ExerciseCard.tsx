@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Pressable, Alert, Vibration } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable, Vibration } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, BORDER_RADIUS, getMuscleColor } from '../../constants/colors';
 import { FONTS } from '../../constants/typography';
@@ -8,6 +8,7 @@ import { SetRow } from './SetRow';
 import { SetMarks } from '../ui/SetMarks';
 import { formatClock, formatSeconds, formatWeight } from '../../lib/utils';
 import { notifySuccess } from '../../lib/feedback';
+import { showConfirm, showDialog } from '../../lib/dialog';
 
 interface ExerciseCardProps {
     item: ExerciseInProgress;
@@ -96,20 +97,25 @@ export const ExerciseCard = React.memo(function ExerciseCard({
     };
 
     const openMenu = () => {
-        Alert.alert(exercise.name, undefined, [
-            ...(isFirst ? [] : [{ text: '↑ Subir', onPress: () => moveExercise(index, index - 1) }]),
-            ...(isLast ? [] : [{ text: '↓ Bajar', onPress: () => moveExercise(index, index + 1) }]),
-            {
-                text: 'Quitar del entrenamiento',
-                style: 'destructive' as const,
-                onPress: () =>
-                    Alert.alert('Quitar ejercicio', `¿Quitar "${exercise.name}" de este entrenamiento?`, [
-                        { text: 'Cancelar', style: 'cancel' },
-                        { text: 'Quitar', style: 'destructive', onPress: () => removeExercise(index) },
-                    ]),
-            },
-            { text: 'Cancelar', style: 'cancel' as const },
-        ]);
+        showDialog({
+            title: exercise.name,
+            actions: [
+                ...(isFirst ? [] : [{ label: 'Subir un puesto', onPress: () => moveExercise(index, index - 1) }]),
+                ...(isLast ? [] : [{ label: 'Bajar un puesto', onPress: () => moveExercise(index, index + 1) }]),
+                {
+                    label: 'Quitar del entrenamiento',
+                    style: 'destructive' as const,
+                    onPress: () =>
+                        showConfirm({
+                            title: 'Quitar ejercicio',
+                            message: `¿Quitar "${exercise.name}" de este entrenamiento?`,
+                            confirmLabel: 'Quitar',
+                            onConfirm: () => removeExercise(index),
+                        }),
+                },
+                { label: 'Cancelar', style: 'cancel' as const },
+            ],
+        });
     };
 
     return (

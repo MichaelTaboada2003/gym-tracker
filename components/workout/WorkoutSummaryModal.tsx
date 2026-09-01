@@ -72,7 +72,7 @@ export function WorkoutSummaryModal({ visible, data, onClose }: WorkoutSummaryMo
                     </View>
 
                     {/* Title */}
-                    <Text style={styles.title}>¡Entrenamiento Completado!</Text>
+                    <Text style={styles.title}>¡Entrenamiento completado!</Text>
                     <Text style={styles.routineName}>
                         {data.routineName || 'Entrenamiento Libre'}
                     </Text>
@@ -219,7 +219,7 @@ export function WorkoutSummaryModal({ visible, data, onClose }: WorkoutSummaryMo
                         variant="gradient"
                         size="lg"
                         fullWidth
-                        icon={<Ionicons name="checkmark-circle" size={20} color="#FFF" />}
+                        icon={<Ionicons name="checkmark-circle" size={20} color={COLORS.onChalk} />}
                     />
                 </View>
             </View>

@@ -7,7 +7,6 @@ import {
     ScrollView,
     TouchableOpacity,
     TextInput,
-    Alert,
     KeyboardAvoidingView,
     Platform,
 } from 'react-native';
@@ -22,6 +21,7 @@ import { useExercises } from '../../hooks/useExercises';
 import { Exercise } from '../../lib/database.types';
 import { estimateRoutineMinutes, getDurationLabel } from '../../lib/durationCalculator';
 import { formatSeconds, parseTargetReps } from '../../lib/utils';
+import { showAlert, showConfirm } from '../../lib/dialog';
 
 const REST_TIME_OPTIONS = [30, 45, 60, 75, 90, 105, 120, 150, 180];
 const TIME_PER_REP_OPTIONS = [2, 3, 4, 5];
@@ -170,13 +170,13 @@ export function CreateRoutineModal({ visible, onClose, onCreate, onUpdate, initi
     const goNext = () => {
         if (step === 1) {
             if (!name.trim()) {
-                Alert.alert('Falta el nombre', 'Ponle un nombre a la rutina para poder guardarla.');
+                showAlert('Falta el nombre', 'Ponle un nombre a la rutina para poder guardarla.');
                 return;
             }
             setStep(2);
         } else if (step === 2) {
             if (drafts.length === 0) {
-                Alert.alert('Sin ejercicios', 'Selecciona al menos un ejercicio.');
+                showAlert('Sin ejercicios', 'Selecciona al menos un ejercicio.');
                 return;
             }
             setStep(3);
@@ -204,7 +204,7 @@ export function CreateRoutineModal({ visible, onClose, onCreate, onUpdate, initi
             onClose();
         } catch (error) {
             console.error('[routine-builder] save failed:', error);
-            Alert.alert('Error', 'No se pudo guardar la rutina.');
+            showAlert('Error', 'No se pudo guardar la rutina.');
         } finally {
             setSaving(false);
         }
@@ -216,17 +216,16 @@ export function CreateRoutineModal({ visible, onClose, onCreate, onUpdate, initi
             onClose();
             return;
         }
-        Alert.alert('Descartar cambios', 'Perderás lo que has configurado en esta rutina.', [
-            { text: 'Seguir editando', style: 'cancel' },
-            {
-                text: 'Descartar',
-                style: 'destructive',
-                onPress: () => {
-                    reset();
-                    onClose();
-                },
+        showConfirm({
+            title: 'Descartar cambios',
+            message: 'Perderás lo que has configurado en esta rutina.',
+            confirmLabel: 'Descartar',
+            cancelLabel: 'Seguir editando',
+            onConfirm: () => {
+                reset();
+                onClose();
             },
-        ]);
+        });
     };
 
     return (

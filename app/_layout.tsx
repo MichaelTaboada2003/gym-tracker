@@ -17,6 +17,7 @@ import { COLORS, FONT_SIZES, SPACING } from '../constants/colors';
 import { FONTS } from '../constants/typography';
 import { initializeDatabase } from '../lib/localDatabase';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
+import { DialogHost } from '../components/ui/DialogHost';
 
 type InitState = { status: 'loading' } | { status: 'ready' } | { status: 'failed'; error: string };
 
@@ -84,6 +85,9 @@ export default function RootLayout() {
                             <Stack.Screen name="exercise/[id]" options={{ headerShown: false }} />
                             <Stack.Screen name="settings" options={{ headerShown: false }} />
                         </Stack>
+                        {/* Mounted once, above every screen, so `showDialog` can be
+                            called from anywhere without prop drilling. */}
+                        <DialogHost />
                     </ErrorBoundary>
                 )}
             </View>

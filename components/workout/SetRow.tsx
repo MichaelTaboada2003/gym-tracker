@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, BORDER_RADIUS } from '../../constants/colors';
 import { FONTS } from '../../constants/typography';
 import { SetData } from '../../store/workoutStore';
 import { formatWeight } from '../../lib/utils';
 import { tapLight, tapMedium } from '../../lib/feedback';
+import { showDialog } from '../../lib/dialog';
 
 interface SetRowProps {
     set: SetData;
@@ -112,14 +113,17 @@ export function SetRow({
     };
 
     const openSetMenu = () => {
-        Alert.alert(`Serie ${set.setNumber}`, undefined, [
-            {
-                text: set.isWarmup ? 'Marcar como serie efectiva' : 'Marcar como calentamiento',
-                onPress: () => onUpdate({ isWarmup: !set.isWarmup }),
-            },
-            { text: 'Eliminar serie', style: 'destructive', onPress: onDelete },
-            { text: 'Cancelar', style: 'cancel' },
-        ]);
+        showDialog({
+            title: `Serie ${set.setNumber}`,
+            actions: [
+                {
+                    label: set.isWarmup ? 'Marcar como serie efectiva' : 'Marcar como calentamiento',
+                    onPress: () => onUpdate({ isWarmup: !set.isWarmup }),
+                },
+                { label: 'Eliminar serie', style: 'destructive', onPress: onDelete },
+                { label: 'Cancelar', style: 'cancel' },
+            ],
+        });
     };
 
     const hasPrevious = previousWeight !== undefined && previousWeight > 0;

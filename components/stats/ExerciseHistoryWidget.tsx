@@ -777,7 +777,9 @@ const styles = StyleSheet.create({
         color: COLORS.textSecondary,
     },
     rangeBtnTextActive: {
-        color: '#FFF',
+        // The active pill is chalk, so its label is iron. White on white was
+        // invisible: the selected range simply disappeared.
+        color: COLORS.onChalk,
     },
     fullStatsGrid: {
         flexDirection: 'row',

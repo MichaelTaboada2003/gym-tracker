@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, FlatList, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, FlatList, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +16,7 @@ import { useRoutines, RoutineWithExercises } from '../../hooks/useRoutines';
 import { useRefreshOnFocus } from '../../hooks/useRefreshOnFocus';
 import { Exercise } from '../../lib/database.types';
 import { formatClock, formatVolumeShort } from '../../lib/utils';
+import { showAlert, showConfirm, showDialog } from '../../lib/dialog';
 
 const KEEP_AWAKE_TAG = 'gym-tracker-workout';
 
@@ -92,7 +93,7 @@ export default function WorkoutScreen() {
                 notifySuccess();
             } catch (error) {
                 console.error('[workout] could not start routine:', error);
-                Alert.alert('Error', 'No se pudo iniciar la rutina');
+                showAlert('Error', 'No se pudo iniciar la rutina');
             }
         },
         [addExercisesWithHistory, startWorkout]
@@ -123,10 +124,14 @@ export default function WorkoutScreen() {
     const finishWorkout = async () => {
         const completed = getCompletedSets();
         if (completed === 0) {
-            Alert.alert('Sin series completadas', 'Marca al menos una serie antes de finalizar.', [
-                { text: 'Entendido' },
-                { text: 'Descartar entrenamiento', style: 'destructive', onPress: confirmDiscard },
-            ]);
+            showDialog({
+                title: 'Sin series completadas',
+                message: 'Marca al menos una serie antes de finalizar.',
+                actions: [
+                    { label: 'Descartar entrenamiento', style: 'destructive', onPress: confirmDiscard },
+                    { label: 'Seguir entrenando', style: 'cancel' },
+                ],
+            });
             return;
         }
 
@@ -143,7 +148,7 @@ export default function WorkoutScreen() {
                 const saved = await saveWorkout();
                 if (!saved) {
                     // Every completed set had 0 reps, so there was nothing to store.
-                    Alert.alert('Nada que guardar', 'Las series marcadas no tienen repeticiones.');
+                    showAlert('Nada que guardar', 'Las series marcadas no tienen repeticiones.');
                     return;
                 }
 
@@ -159,7 +164,7 @@ export default function WorkoutScreen() {
                 notifySuccess();
             } catch (error) {
                 console.error('[workout] save failed:', error);
-                Alert.alert('Error', 'No se pudo guardar el entrenamiento. Inténtalo de nuevo.');
+                showAlert('Error', 'No se pudo guardar el entrenamiento. Inténtalo de nuevo.');
             } finally {
                 setSaving(false);
             }
@@ -167,14 +172,14 @@ export default function WorkoutScreen() {
 
         // Warn about half-finished work instead of silently dropping it.
         if (hasUnfinishedSets()) {
-            Alert.alert(
-                'Series sin marcar',
-                'Hay series que no marcaste como completadas. No se guardarán.',
-                [
-                    { text: 'Seguir entrenando', style: 'cancel' },
-                    { text: 'Finalizar igual', onPress: proceed },
-                ]
-            );
+            showDialog({
+                title: 'Series sin marcar',
+                message: 'Hay series que no marcaste como completadas. No se guardarán.',
+                actions: [
+                    { label: 'Finalizar igual', onPress: proceed },
+                    { label: 'Seguir entrenando', style: 'cancel' },
+                ],
+            });
             return;
         }
 
@@ -182,10 +187,12 @@ export default function WorkoutScreen() {
     };
 
     const confirmDiscard = () => {
-        Alert.alert('Descartar entrenamiento', 'Se perderán las series registradas. Esta acción no se puede deshacer.', [
-            { text: 'Cancelar', style: 'cancel' },
-            { text: 'Descartar', style: 'destructive', onPress: discardWorkout },
-        ]);
+        showConfirm({
+            title: 'Descartar entrenamiento',
+            message: 'Se perderán las series registradas. Esta acción no se puede deshacer.',
+            confirmLabel: 'Descartar',
+            onConfirm: discardWorkout,
+        });
     };
 
     // ── Idle state ────────────────────────────────────────────────────────────

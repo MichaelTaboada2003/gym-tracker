@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { Calendar, DateData, LocaleConfig } from 'react-native-calendars';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { useRefreshOnFocus } from '../../hooks/useRefreshOnFocus';
 import { storage, deleteSessionCascade } from '../../lib/localDatabase';
 import { formatLongDate, formatMinutes, formatVolume, formatVolumeShort, toISODate } from '../../lib/utils';
+import { showConfirm } from '../../lib/dialog';
 
 // Configure Spanish locale
 LocaleConfig.locales['es'] = {
@@ -121,19 +122,17 @@ export default function CalendarScreen() {
      * so a fat-fingered workout stayed in the stats forever.
      */
     const confirmDeleteSession = (sessionId: string, label: string) => {
-        Alert.alert('Eliminar entrenamiento', `Se borrará "${label}" y todas sus series.`, [
-            { text: 'Cancelar', style: 'cancel' },
-            {
-                text: 'Eliminar',
-                style: 'destructive',
-                onPress: async () => {
-                    await deleteSessionCascade(sessionId);
-                    setSelectedDayWorkout(null);
-                    setSelectedDate(null);
-                    await fetchData();
-                },
+        showConfirm({
+            title: 'Eliminar entrenamiento',
+            message: `Se borrará "${label}" y todas sus series.`,
+            confirmLabel: 'Eliminar',
+            onConfirm: async () => {
+                await deleteSessionCascade(sessionId);
+                setSelectedDayWorkout(null);
+                setSelectedDate(null);
+                await fetchData();
             },
-        ]);
+        });
     };
 
     const handleDayPress = (day: DateData) => {

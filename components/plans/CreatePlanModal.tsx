@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
@@ -9,6 +9,7 @@ import { Routine } from '../../lib/database.types';
 import { useRoutines } from '../../hooks/useRoutines';
 import { PlanWithRoutines, PlanDayInput } from '../../hooks/usePlans';
 import { formatMinutes } from '../../lib/utils';
+import { showAlert } from '../../lib/dialog';
 
 /** A plan cycle longer than a fortnight stops being a cycle. */
 const MAX_DAYS = 14;
@@ -92,11 +93,11 @@ export function CreatePlanModal({ visible, onClose, onCreate, onUpdate, initialD
 
     const handleNext = () => {
         if (!name.trim()) {
-            Alert.alert('Error', 'Por favor ingresa un nombre para el programa');
+            showAlert('Error', 'Por favor ingresa un nombre para el programa');
             return;
         }
         if (numDays < 1 || numDays > MAX_DAYS) {
-            Alert.alert('Días no válidos', `El ciclo debe tener entre 1 y ${MAX_DAYS} días.`);
+            showAlert('Días no válidos', `El ciclo debe tener entre 1 y ${MAX_DAYS} días.`);
             return;
         }
 
@@ -130,7 +131,7 @@ export function CreatePlanModal({ visible, onClose, onCreate, onUpdate, initialD
             resetForm();
             onClose();
         } catch (error) {
-            Alert.alert('Error', 'No se pudo guardar el programa');
+            showAlert('Error', 'No se pudo guardar el programa');
         } finally {
             setLoading(false);
         }
