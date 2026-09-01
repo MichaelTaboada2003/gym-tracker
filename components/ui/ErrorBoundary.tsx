@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
+import { FONTS } from '../../constants/typography';
 import { Button } from './Button';
 
 interface Props {
@@ -72,7 +73,7 @@ const styles = StyleSheet.create({
     },
     title: {
         fontSize: FONT_SIZES.xl,
-        fontWeight: '800',
+        fontFamily: FONTS.display,
         color: COLORS.textPrimary,
     },
     subtitle: {

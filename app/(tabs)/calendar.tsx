@@ -4,6 +4,7 @@ import { Calendar, DateData, LocaleConfig } from 'react-native-calendars';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, getMuscleColor } from '../../constants/colors';
+import { FONTS } from '../../constants/typography';
 import { Card } from '../../components/ui/Card';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { useRefreshOnFocus } from '../../hooks/useRefreshOnFocus';
@@ -348,7 +349,7 @@ const styles = StyleSheet.create({
     },
     selectedDateTitle: {
         fontSize: FONT_SIZES.lg,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
         color: COLORS.textPrimary,
         textTransform: 'capitalize',
         marginBottom: SPACING.md,
@@ -369,7 +370,7 @@ const styles = StyleSheet.create({
     summaryText: {
         fontSize: FONT_SIZES.sm,
         color: COLORS.textSecondary,
-        fontWeight: '500',
+        fontFamily: FONTS.medium,
     },
     routineBadge: {
         flexDirection: 'row',
@@ -392,11 +393,11 @@ const styles = StyleSheet.create({
     routineName: {
         fontSize: FONT_SIZES.sm,
         color: COLORS.primary,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
     },
     exercisesTitle: {
         fontSize: FONT_SIZES.md,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         color: COLORS.textPrimary,
         marginBottom: SPACING.sm,
     },
@@ -418,7 +419,7 @@ const styles = StyleSheet.create({
     },
     exerciseName: {
         fontSize: FONT_SIZES.md,
-        fontWeight: '500',
+        fontFamily: FONTS.medium,
         color: COLORS.textPrimary,
     },
     exerciseMeta: {
@@ -444,7 +445,7 @@ const styles = StyleSheet.create({
     },
     monthStatValue: {
         fontSize: FONT_SIZES.xl,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
         color: COLORS.primary,
     },
     monthStatLabel: {

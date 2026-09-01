@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/colors';
+import { FONTS } from '../constants/typography';
 import { clearAllData, seedDatabase, storage } from '../lib/localDatabase';
 import { useWorkoutStore } from '../store/workoutStore';
 import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
@@ -266,7 +267,7 @@ const styles = StyleSheet.create({
     },
     sectionLabel: {
         fontSize: FONT_SIZES.xs,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
         color: COLORS.textMuted,
         textTransform: 'uppercase',
         letterSpacing: 1,
@@ -303,7 +304,7 @@ const styles = StyleSheet.create({
     rowLabel: {
         flex: 1,
         fontSize: FONT_SIZES.sm,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         color: COLORS.textPrimary,
     },
     rowSubtitle: {
@@ -313,7 +314,7 @@ const styles = StyleSheet.create({
     },
     rowValue: {
         fontSize: FONT_SIZES.sm,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
         color: COLORS.textSecondary,
     },
     actionIcon: {

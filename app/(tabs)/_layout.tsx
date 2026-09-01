@@ -2,6 +2,7 @@ import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform, StyleSheet, View } from 'react-native';
 import { COLORS } from '../../constants/colors';
+import { FONTS } from '../../constants/typography';
 import { useWorkoutStore } from '../../store/workoutStore';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -25,16 +26,20 @@ export default function TabLayout() {
                 tabBarActiveTintColor: COLORS.primaryLight,
                 tabBarInactiveTintColor: COLORS.textMuted,
                 tabBarStyle: {
-                    backgroundColor: COLORS.surface,
+                    // The bar sits on the page colour, separated by a hairline,
+                    // so it reads as an edge of the surface rather than a slab.
+                    backgroundColor: COLORS.background,
                     borderTopColor: COLORS.border,
                     borderTopWidth: StyleSheet.hairlineWidth,
                     height: Platform.OS === 'ios' ? 88 : 64,
-                    paddingTop: 6,
+                    paddingTop: 8,
                     paddingBottom: Platform.OS === 'ios' ? 28 : 8,
                 },
                 tabBarLabelStyle: {
-                    fontSize: 11,
-                    fontWeight: '600',
+                    fontFamily: FONTS.medium,
+                    fontSize: 10,
+                    letterSpacing: 0.6,
+                    marginTop: 2,
                 },
             }}
         >
@@ -68,7 +73,7 @@ export default function TabLayout() {
                 name="exercises"
                 options={{
                     title: 'Ejercicios',
-                    tabBarIcon: (props) => <TabIcon name="fitness" {...props} />,
+                    tabBarIcon: (props) => <TabIcon name="albums" {...props} />,
                 }}
             />
             <Tabs.Screen
@@ -94,6 +99,6 @@ const styles = StyleSheet.create({
         borderRadius: 5,
         backgroundColor: COLORS.error,
         borderWidth: 1.5,
-        borderColor: COLORS.surface,
+        borderColor: COLORS.background,
     },
 });

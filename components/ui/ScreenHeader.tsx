@@ -1,9 +1,9 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ViewStyle } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, FONT_SIZES, HIT_SIZE } from '../../constants/colors';
+import { FONTS } from '../../constants/typography';
 
 export interface HeaderAction {
     icon: React.ComponentProps<typeof Ionicons>['name'];
@@ -33,12 +33,7 @@ export function ScreenHeader({ eyebrow, title, onBack, actions = [], style }: Sc
     const insets = useSafeAreaInsets();
 
     return (
-        <LinearGradient
-            colors={[COLORS.primary + '15', 'transparent']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.header, { paddingTop: insets.top + SPACING.md }, style]}
-        >
+        <View style={[styles.header, { paddingTop: insets.top + SPACING.md }, style]}>
             <View style={styles.row}>
                 {onBack && (
                     <TouchableOpacity
@@ -68,28 +63,29 @@ export function ScreenHeader({ eyebrow, title, onBack, actions = [], style }: Sc
                                 accessibilityRole="button"
                                 accessibilityLabel={action.accessibilityLabel}
                             >
-                                {action.variant === 'plain' || !action.variant ? (
-                                    <View style={styles.actionPlain}>
-                                        <Ionicons name={action.icon} size={20} color={COLORS.textPrimary} />
-                                    </View>
-                                ) : (
-                                    <LinearGradient
-                                        colors={
-                                            action.variant === 'secondary'
-                                                ? COLORS.gradients.secondary
-                                                : COLORS.gradients.primary
+                                <View
+                                    style={[
+                                        styles.action,
+                                        action.variant === 'primary' && styles.actionPrimary,
+                                        action.variant === 'secondary' && styles.actionSecondary,
+                                    ]}
+                                >
+                                    <Ionicons
+                                        name={action.icon}
+                                        size={20}
+                                        color={
+                                            action.variant === 'primary'
+                                                ? COLORS.onChalk
+                                                : COLORS.textPrimary
                                         }
-                                        style={styles.actionGradient}
-                                    >
-                                        <Ionicons name={action.icon} size={20} color="#FFF" />
-                                    </LinearGradient>
-                                )}
+                                    />
+                                </View>
                             </TouchableOpacity>
                         ))}
                     </View>
                 )}
             </View>
-        </LinearGradient>
+        </View>
     );
 }
 
@@ -97,6 +93,7 @@ const styles = StyleSheet.create({
     header: {
         paddingHorizontal: SPACING.lg,
         paddingBottom: SPACING.md,
+        backgroundColor: COLORS.background,
     },
     row: {
         flexDirection: 'row',
@@ -114,18 +111,19 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     eyebrow: {
-        fontSize: 11,
-        fontWeight: '700',
-        color: COLORS.primary,
-        letterSpacing: 2.5,
-        marginBottom: 2,
+        fontFamily: FONTS.semibold,
+        fontSize: 10,
+        color: COLORS.textMuted,
+        letterSpacing: 2,
+        marginBottom: 1,
         textTransform: 'uppercase',
     },
     title: {
-        fontSize: 32,
-        fontWeight: '800',
+        fontFamily: FONTS.display,
+        fontSize: 34,
+        lineHeight: 36,
         color: COLORS.textPrimary,
-        letterSpacing: -0.5,
+        letterSpacing: 0.2,
     },
     actions: {
         flexDirection: 'row',
@@ -135,19 +133,20 @@ const styles = StyleSheet.create({
         borderRadius: 14,
         overflow: 'hidden',
     },
-    actionGradient: {
+    action: {
         width: HIT_SIZE,
         height: HIT_SIZE,
         alignItems: 'center',
         justifyContent: 'center',
+        backgroundColor: COLORS.surface,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: COLORS.surfaceHighlight,
     },
-    actionPlain: {
-        width: HIT_SIZE,
-        height: HIT_SIZE,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: COLORS.overlay.medium,
-        borderWidth: 1,
-        borderColor: COLORS.overlay.light,
+    actionPrimary: {
+        backgroundColor: COLORS.primary,
+        borderColor: COLORS.primary,
+    },
+    actionSecondary: {
+        backgroundColor: COLORS.surfaceLight,
     },
 });

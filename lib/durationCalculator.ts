@@ -169,16 +169,7 @@ export function quickEstimateMinutes(
     return Math.round(totalSeconds / 60);
 }
 
-/**
- * Duration bucket used for the colour + label badge on routine cards.
- */
-export function getDurationColor(minutes: number): string {
-    if (minutes <= 30) return '#10B981'; // Rápido
-    if (minutes <= 60) return '#3B82F6'; // Moderado
-    if (minutes <= 90) return '#F59E0B'; // Largo
-    return '#EF4444'; // Muy largo
-}
-
+/** Plain-language duration bucket, shown as text beside the minutes. */
 export function getDurationLabel(minutes: number): string {
     if (minutes <= 30) return 'Rápido';
     if (minutes <= 60) return 'Moderado';

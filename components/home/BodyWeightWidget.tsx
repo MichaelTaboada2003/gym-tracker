@@ -4,6 +4,7 @@ import { LineChart } from 'react-native-gifted-charts';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
+import { FONTS } from '../../constants/typography';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { useBodyWeight, DateRange } from '../../hooks/useBodyWeight';
@@ -66,6 +67,16 @@ export const BodyWeightWidget = () => {
             });
     }, [getLogsForRange, detailRange]);
 
+    /** Sparkline frame: pad the real range so the line uses the box's height. */
+    const widgetChartRange = useMemo(() => {
+        const values = widgetChartData.map((d) => d.value);
+        if (values.length === 0) return { offset: 0, max: 1 };
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const pad = Math.max(0.5, (max - min) * 0.35);
+        return { offset: Math.floor(min - pad), max: Math.ceil(max + pad) };
+    }, [widgetChartData]);
+
     // Calculate trend (from stats)
     const stats = useMemo(() => getStatsForRange('7d'), [getStatsForRange]);
     const detailStats = useMemo(() => getStatsForRange(detailRange), [getStatsForRange, detailRange]);
@@ -102,7 +113,7 @@ export const BodyWeightWidget = () => {
     return (
         <View>
             <TouchableOpacity activeOpacity={0.8} onPress={() => setIsDetailModalVisible(true)}>
-                <Card title="Peso Corporal">
+                <Card title="Peso corporal">
                     <View style={styles.container}>
                         <View style={styles.statsContainer}>
                             <View>
@@ -116,16 +127,16 @@ export const BodyWeightWidget = () => {
                                 {stats.change !== 0 && (
                                     <View style={[
                                         styles.trendContainer,
-                                        { backgroundColor: stats.change <= 0 ? COLORS.success + '20' : COLORS.warning + '20' }
+                                        { backgroundColor: COLORS.surfaceLight }
                                     ]}>
                                         <Ionicons
                                             name={stats.change > 0 ? "caret-up" : "caret-down"}
                                             size={12}
-                                            color={stats.change <= 0 ? COLORS.success : COLORS.warning}
+                                            color={COLORS.textSecondary}
                                         />
                                         <Text style={[
                                             styles.trendText,
-                                            { color: stats.change <= 0 ? COLORS.success : COLORS.warning }
+                                            { color: COLORS.textSecondary }
                                         ]}>
                                             {Math.abs(stats.change).toFixed(1)} kg
                                         </Text>
@@ -152,12 +163,13 @@ export const BodyWeightWidget = () => {
                                         initialSpacing={5}
                                         endSpacing={5}
                                         areaChart
-                                        startFillColor={COLORS.primary + '40'}
-                                        endFillColor={COLORS.primary + '05'}
-                                        startOpacity={0.4}
+                                        startFillColor={COLORS.primary}
+                                        endFillColor={COLORS.surface}
+                                        startOpacity={0.18}
                                         endOpacity={0}
                                         xAxisLabelsHeight={0}
-                                        yAxisOffset={0}
+                                        yAxisOffset={widgetChartRange.offset}
+                                        maxValue={widgetChartRange.max - widgetChartRange.offset}
                                         adjustToWidth
                                     />
                                 ) : (
@@ -170,7 +182,7 @@ export const BodyWeightWidget = () => {
 
                         <View style={styles.actionRow}>
                             <Button
-                                title="Registrar Peso"
+                                title="Registrar peso"
                                 variant="secondary"
                                 size="sm"
                                 icon={<Ionicons name="add" size={16} color={COLORS.textPrimary} />}
@@ -197,7 +209,7 @@ export const BodyWeightWidget = () => {
             >
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Registrar Peso</Text>
+                        <Text style={styles.modalTitle}>Registrar peso</Text>
 
                         <View style={styles.inputContainer}>
                             <TextInput
@@ -287,7 +299,7 @@ export const BodyWeightWidget = () => {
                                 <Text style={styles.statBoxLabel}>Cambio</Text>
                                 <Text style={[
                                     styles.statBoxValue,
-                                    { color: detailStats.change <= 0 ? COLORS.success : COLORS.warning }
+                                    { color: COLORS.textSecondary }
                                 ]}>
                                     {formatChange(detailStats.change)}
                                 </Text>
@@ -332,8 +344,8 @@ export const BodyWeightWidget = () => {
                                         endFillColor={COLORS.primary + '05'}
                                         startOpacity={0.5}
                                         endOpacity={0}
-                                        yAxisTextStyle={{ color: COLORS.textSecondary, fontSize: 10 }}
-                                        xAxisLabelTextStyle={{ color: COLORS.textSecondary, fontSize: 9 }}
+                                        yAxisTextStyle={styles.chartAxisText}
+                                        xAxisLabelTextStyle={styles.chartAxisText}
                                         yAxisColor={COLORS.surfaceHighlight}
                                         xAxisColor={COLORS.surfaceHighlight}
                                         noOfSections={4}
@@ -402,6 +414,11 @@ export const BodyWeightWidget = () => {
 };
 
 const styles = StyleSheet.create({
+    chartAxisText: {
+        fontFamily: FONTS.medium,
+        color: COLORS.textMuted,
+        fontSize: 10,
+    },
     container: {
         gap: SPACING.md,
     },
@@ -411,10 +428,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     currentWeightLabel: {
-        fontSize: FONT_SIZES.xs,
-        color: COLORS.textSecondary,
-        marginBottom: 4,
+        fontFamily: FONTS.medium,
+        fontSize: 9,
+        letterSpacing: 1.4,
         textTransform: 'uppercase',
+        color: COLORS.textMuted,
     },
     weightValueRow: {
         flexDirection: 'row',
@@ -422,14 +440,17 @@ const styles = StyleSheet.create({
         gap: 4,
     },
     currentWeight: {
-        fontSize: 32,
-        fontWeight: '800',
+        fontFamily: FONTS.display,
+        fontSize: 40,
+        lineHeight: 42,
         color: COLORS.textPrimary,
+        fontVariant: ['tabular-nums'],
     },
     unit: {
-        fontSize: FONT_SIZES.sm,
-        color: COLORS.textSecondary,
-        fontWeight: '600',
+        fontFamily: FONTS.medium,
+        fontSize: 13,
+        color: COLORS.textMuted,
+        marginLeft: 3,
     },
     trendContainer: {
         flexDirection: 'row',
@@ -443,7 +464,7 @@ const styles = StyleSheet.create({
     },
     trendText: {
         fontSize: 10,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
     },
     chartWrapper: {
         height: 70,
@@ -494,11 +515,9 @@ const styles = StyleSheet.create({
         borderColor: COLORS.surfaceHighlight,
     },
     modalTitle: {
-        fontSize: FONT_SIZES.lg,
-        fontWeight: '700',
+        fontFamily: FONTS.display,
+        fontSize: 24,
         color: COLORS.textPrimary,
-        marginBottom: SPACING.lg,
-        textAlign: 'center',
     },
     inputContainer: {
         flexDirection: 'row',
@@ -509,7 +528,7 @@ const styles = StyleSheet.create({
     },
     input: {
         fontSize: 48,
-        fontWeight: '800',
+        fontFamily: FONTS.display,
         color: COLORS.primary,
         textAlign: 'center',
         minWidth: 120,
@@ -520,7 +539,7 @@ const styles = StyleSheet.create({
     inputUnit: {
         fontSize: FONT_SIZES.xl,
         color: COLORS.textSecondary,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         marginTop: 10,
     },
     modalHint: {
@@ -551,7 +570,7 @@ const styles = StyleSheet.create({
     },
     detailTitle: {
         fontSize: FONT_SIZES.xl,
-        fontWeight: '800',
+        fontFamily: FONTS.display,
         color: COLORS.textPrimary,
     },
     closeButton: {
@@ -575,7 +594,7 @@ const styles = StyleSheet.create({
     },
     rangeButtonText: {
         fontSize: FONT_SIZES.sm,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         color: COLORS.textSecondary,
     },
     rangeButtonTextActive: {
@@ -596,15 +615,17 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     statBoxLabel: {
-        fontSize: FONT_SIZES.xs,
-        color: COLORS.textSecondary,
-        marginBottom: 4,
+        fontFamily: FONTS.medium,
+        fontSize: 9,
+        letterSpacing: 1.1,
         textTransform: 'uppercase',
+        color: COLORS.textMuted,
     },
     statBoxValue: {
-        fontSize: FONT_SIZES.lg,
-        fontWeight: '700',
+        fontFamily: FONTS.display,
+        fontSize: 19,
         color: COLORS.textPrimary,
+        fontVariant: ['tabular-nums'],
     },
     detailChartContainer: {
         backgroundColor: COLORS.surfaceLight,
@@ -633,12 +654,12 @@ const styles = StyleSheet.create({
     },
     historyHint: {
         fontSize: 10,
-        fontWeight: '400',
+        fontFamily: FONTS.regular,
         color: COLORS.textMuted,
     },
     historyTitle: {
         fontSize: FONT_SIZES.md,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
         color: COLORS.textPrimary,
         marginBottom: SPACING.sm,
     },
@@ -655,13 +676,16 @@ const styles = StyleSheet.create({
         borderBottomColor: COLORS.surfaceHighlight,
     },
     historyDate: {
-        fontSize: FONT_SIZES.sm,
-        color: COLORS.textSecondary,
+        fontFamily: FONTS.regular,
+        fontSize: 12,
+        color: COLORS.textMuted,
+        textTransform: 'capitalize',
     },
     historyWeight: {
-        fontSize: FONT_SIZES.md,
-        fontWeight: '600',
+        fontFamily: FONTS.display,
+        fontSize: 16,
         color: COLORS.textPrimary,
+        fontVariant: ['tabular-nums'],
     },
     noHistoryText: {
         fontSize: FONT_SIZES.sm,

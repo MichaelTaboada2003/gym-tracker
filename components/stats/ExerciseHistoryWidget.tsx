@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-gifted-charts';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
+import { FONTS } from '../../constants/typography';
 import { storage } from '../../lib/localDatabase';
 import { useRefreshOnFocus } from '../../hooks/useRefreshOnFocus';
 import { parseISODate, toISODate } from '../../lib/utils';
@@ -521,7 +522,7 @@ const styles = StyleSheet.create({
     emptyText: {
         fontSize: FONT_SIZES.md,
         color: COLORS.textSecondary,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
     },
     emptySubtext: {
         fontSize: FONT_SIZES.sm,
@@ -535,7 +536,7 @@ const styles = StyleSheet.create({
     },
     title: {
         fontSize: FONT_SIZES.lg,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
         color: COLORS.textPrimary,
     },
     exerciseSelector: {
@@ -560,11 +561,11 @@ const styles = StyleSheet.create({
     selectorText: {
         fontSize: FONT_SIZES.md,
         color: COLORS.textPrimary,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
     },
     selectorMuscle: {
         fontSize: FONT_SIZES.xs,
-        fontWeight: '500',
+        fontFamily: FONTS.medium,
         marginTop: 2,
     },
     statsGrid: {
@@ -582,18 +583,18 @@ const styles = StyleSheet.create({
     statLabel: {
         fontSize: 10,
         color: COLORS.textMuted,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         letterSpacing: 1,
         marginBottom: 6,
     },
     statValue: {
         fontSize: 24,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
         color: COLORS.textPrimary,
     },
     statUnit: {
         fontSize: FONT_SIZES.sm,
-        fontWeight: '500',
+        fontFamily: FONTS.medium,
         color: COLORS.textSecondary,
     },
     statHeader: {
@@ -632,7 +633,7 @@ const styles = StyleSheet.create({
     chartDateText: {
         fontSize: FONT_SIZES.xs,
         color: COLORS.textMuted,
-        fontWeight: '500',
+        fontFamily: FONTS.medium,
     },
     noChartData: {
         height: 120,
@@ -644,7 +645,7 @@ const styles = StyleSheet.create({
         fontSize: FONT_SIZES.md,
         color: COLORS.textSecondary,
         textAlign: 'center',
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
     },
     noChartSubtitle: {
         fontSize: FONT_SIZES.sm,
@@ -691,7 +692,7 @@ const styles = StyleSheet.create({
     },
     pickerTitle: {
         fontSize: FONT_SIZES.lg,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
         color: COLORS.textPrimary,
     },
     pickerList: {
@@ -720,7 +721,7 @@ const styles = StyleSheet.create({
     },
     pickerItemName: {
         fontSize: FONT_SIZES.md,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         color: COLORS.textPrimary,
     },
     pickerItemNameSelected: {
@@ -746,7 +747,7 @@ const styles = StyleSheet.create({
     },
     modalTitle: {
         fontSize: FONT_SIZES.lg,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
         color: COLORS.textPrimary,
         flex: 1,
     },
@@ -772,7 +773,7 @@ const styles = StyleSheet.create({
     },
     rangeBtnText: {
         fontSize: FONT_SIZES.sm,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         color: COLORS.textSecondary,
     },
     rangeBtnTextActive: {
@@ -794,13 +795,13 @@ const styles = StyleSheet.create({
     fullStatLabel: {
         fontSize: 10,
         color: COLORS.textMuted,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         letterSpacing: 1,
         marginBottom: 4,
     },
     fullStatValue: {
         fontSize: FONT_SIZES.xl,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
         color: COLORS.textPrimary,
     },
     fullChartContainer: {
@@ -819,7 +820,7 @@ const styles = StyleSheet.create({
     noChartTextFull: {
         fontSize: FONT_SIZES.md,
         color: COLORS.textSecondary,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
     },
     noChartSubtext: {
         fontSize: FONT_SIZES.sm,
@@ -831,7 +832,7 @@ const styles = StyleSheet.create({
     },
     recordsTitle: {
         fontSize: FONT_SIZES.md,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
         color: COLORS.textPrimary,
         marginBottom: SPACING.md,
     },
@@ -853,7 +854,7 @@ const styles = StyleSheet.create({
     },
     recordWeight: {
         fontSize: FONT_SIZES.lg,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
         color: COLORS.textPrimary,
     },
     recordReps: {

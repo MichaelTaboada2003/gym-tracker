@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, getMuscleColor } from '../../constants/colors';
+import { FONTS } from '../../constants/typography';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Button } from '../../components/ui/Button';
@@ -112,35 +112,24 @@ export default function RoutineDetailScreen() {
             />
 
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-                <LinearGradient
-                    colors={[routine.durationColor + '22', COLORS.surface]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.heroCard}
-                >
+                <View style={styles.heroCard}>
                     {routine.description ? (
                         <Text style={styles.description}>{routine.description}</Text>
                     ) : null}
 
                     <View style={styles.statsGrid}>
-                        <Stat
-                            icon="time"
-                            tint={routine.durationColor}
-                            value={String(routine.calculatedDuration)}
-                            label="minutos"
-                        />
+                        <Stat icon="time" value={String(routine.calculatedDuration)} label="minutos" />
                         <Stat
                             icon="fitness"
-                            tint={COLORS.info}
                             value={String(routine.routine_exercises.length)}
                             label="ejercicios"
                         />
-                        <Stat icon="layers" tint={COLORS.success} value={String(totalSets)} label="series" />
+                        <Stat icon="layers" value={String(totalSets)} label="series" />
                     </View>
 
-                    <View style={[styles.durationBadge, { backgroundColor: routine.durationColor + '20' }]}>
-                        <Ionicons name="speedometer" size={13} color={routine.durationColor} />
-                        <Text style={[styles.durationBadgeText, { color: routine.durationColor }]}>
+                    <View style={styles.durationBadge}>
+                        <Ionicons name="speedometer-outline" size={13} color={COLORS.textMuted} />
+                        <Text style={styles.durationBadgeText}>
                             Entrenamiento {routine.durationLabel.toLowerCase()} ·{' '}
                             {formatMinutes(routine.calculatedDuration)}
                         </Text>
@@ -160,7 +149,7 @@ export default function RoutineDetailScreen() {
                             ))}
                         </View>
                     )}
-                </LinearGradient>
+                </View>
 
                 <Text style={styles.sectionTitle}>Ejercicios</Text>
 
@@ -223,7 +212,7 @@ export default function RoutineDetailScreen() {
                     fullWidth
                     disabled={routine.routine_exercises.length === 0}
                     onPress={() => router.navigate(`/workout?routineId=${routine.id}`)}
-                    icon={<Ionicons name="play" size={18} color="#FFF" />}
+                    icon={<Ionicons name="play" size={18} color={COLORS.onChalk} />}
                 />
             </View>
 
@@ -242,19 +231,17 @@ export default function RoutineDetailScreen() {
 
 function Stat({
     icon,
-    tint,
     value,
     label,
 }: {
     icon: React.ComponentProps<typeof Ionicons>['name'];
-    tint: string;
     value: string;
     label: string;
 }) {
     return (
         <View style={styles.statItem}>
-            <View style={[styles.statIconBg, { backgroundColor: tint + '20' }]}>
-                <Ionicons name={icon} size={18} color={tint} />
+            <View style={styles.statIconBg}>
+                <Ionicons name={icon} size={17} color={COLORS.textSecondary} />
             </View>
             <Text style={styles.statValue}>{value}</Text>
             <Text style={styles.statLabel}>{label}</Text>
@@ -296,10 +283,9 @@ const styles = StyleSheet.create({
         paddingBottom: SPACING.xxl,
     },
     heroCard: {
-        borderRadius: BORDER_RADIUS.xl,
+        borderRadius: BORDER_RADIUS.lg,
         padding: SPACING.lg,
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
+        backgroundColor: COLORS.surface,
         gap: SPACING.md,
     },
     description: {
@@ -316,16 +302,18 @@ const styles = StyleSheet.create({
         gap: 4,
     },
     statIconBg: {
-        width: 38,
-        height: 38,
-        borderRadius: 19,
+        width: 36,
+        height: 36,
+        borderRadius: BORDER_RADIUS.sm,
+        backgroundColor: COLORS.surfaceLight,
         alignItems: 'center',
         justifyContent: 'center',
     },
     statValue: {
-        fontSize: FONT_SIZES.lg,
-        fontWeight: '800',
+        fontFamily: FONTS.display,
+        fontSize: 22,
         color: COLORS.textPrimary,
+        fontVariant: ['tabular-nums'],
     },
     statLabel: {
         fontSize: 10,
@@ -339,12 +327,14 @@ const styles = StyleSheet.create({
         alignSelf: 'flex-start',
         gap: 5,
         paddingHorizontal: SPACING.sm,
-        paddingVertical: 6,
-        borderRadius: BORDER_RADIUS.full,
+        paddingVertical: 5,
+        borderRadius: BORDER_RADIUS.sm,
+        backgroundColor: COLORS.surfaceLight,
     },
     durationBadgeText: {
+        fontFamily: FONTS.medium,
         fontSize: 11,
-        fontWeight: '700',
+        color: COLORS.textSecondary,
     },
     muscleRow: {
         flexDirection: 'row',
@@ -358,11 +348,11 @@ const styles = StyleSheet.create({
     },
     musclePillText: {
         fontSize: 11,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
     },
     sectionTitle: {
         fontSize: FONT_SIZES.xs,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
         color: COLORS.textMuted,
         textTransform: 'uppercase',
         letterSpacing: 1,
@@ -391,7 +381,7 @@ const styles = StyleSheet.create({
     },
     orderText: {
         fontSize: FONT_SIZES.sm,
-        fontWeight: '800',
+        fontFamily: FONTS.display,
     },
     exerciseContent: {
         flex: 1,
@@ -399,7 +389,7 @@ const styles = StyleSheet.create({
     },
     exerciseName: {
         fontSize: FONT_SIZES.sm,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         color: COLORS.textPrimary,
     },
     exerciseDetails: {
@@ -415,7 +405,7 @@ const styles = StyleSheet.create({
     detailText: {
         fontSize: 11,
         color: COLORS.textSecondary,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
     },
     exerciseNotes: {
         fontSize: 11,

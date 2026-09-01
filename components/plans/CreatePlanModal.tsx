@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ScrollView,
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
+import { FONTS } from '../../constants/typography';
 import { Button } from '../ui/Button';
 import { Routine } from '../../lib/database.types';
 import { useRoutines } from '../../hooks/useRoutines';
@@ -364,7 +365,7 @@ const styles = StyleSheet.create({
     },
     title: {
         fontSize: FONT_SIZES.xl,
-        fontWeight: 'bold',
+        fontFamily: FONTS.bold,
         color: COLORS.textPrimary,
     },
     form: {
@@ -377,7 +378,7 @@ const styles = StyleSheet.create({
     label: {
         fontSize: FONT_SIZES.sm,
         color: COLORS.textSecondary,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
     },
     input: {
         backgroundColor: COLORS.surface,
@@ -416,7 +417,7 @@ const styles = StyleSheet.create({
     },
     dayNumber: {
         color: COLORS.textSecondary,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
         fontSize: FONT_SIZES.sm,
     },
     dayContent: {
@@ -435,7 +436,7 @@ const styles = StyleSheet.create({
     },
     addRoutineText: {
         color: COLORS.primary,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         fontSize: FONT_SIZES.sm,
     },
     assignedRoutine: {
@@ -449,7 +450,7 @@ const styles = StyleSheet.create({
     },
     assignedName: {
         color: COLORS.textPrimary,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         fontSize: FONT_SIZES.sm,
     },
     assignedDuration: {
@@ -485,7 +486,7 @@ const styles = StyleSheet.create({
     },
     selectionTitle: {
         color: COLORS.textPrimary,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
     },
     routinesList: {
 
@@ -497,7 +498,7 @@ const styles = StyleSheet.create({
     },
     routineOptionName: {
         color: COLORS.textPrimary,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
     },
     routineOptionDuration: {
         color: COLORS.textSecondary,

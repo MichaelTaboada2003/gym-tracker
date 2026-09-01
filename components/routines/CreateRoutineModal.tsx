@@ -14,12 +14,13 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, getMuscleColor, HIT_SIZE } from '../../constants/colors';
+import { FONTS } from '../../constants/typography';
 import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
 import { RoutineWithExercises, RoutineExerciseInput } from '../../hooks/useRoutines';
 import { useExercises } from '../../hooks/useExercises';
 import { Exercise } from '../../lib/database.types';
-import { estimateRoutineMinutes, getDurationColor, getDurationLabel } from '../../lib/durationCalculator';
+import { estimateRoutineMinutes, getDurationLabel } from '../../lib/durationCalculator';
 import { formatSeconds, parseTargetReps } from '../../lib/utils';
 
 const REST_TIME_OPTIONS = [30, 45, 60, 75, 90, 105, 120, 150, 180];
@@ -344,19 +345,12 @@ export function CreateRoutineModal({ visible, onClose, onCreate, onUpdate, initi
 
                 {step === 3 && (
                     <ScrollView contentContainerStyle={styles.stepContent} keyboardShouldPersistTaps="handled">
-                        <View
-                            style={[
-                                styles.estimateBanner,
-                                { borderColor: getDurationColor(estimatedMinutes) + '40' },
-                            ]}
-                        >
-                            <Ionicons name="time" size={18} color={getDurationColor(estimatedMinutes)} />
+                        <View style={styles.estimateBanner}>
+                            <Ionicons name="time" size={16} color={COLORS.textSecondary} />
                             <Text style={styles.estimateText}>
                                 Duración estimada{' '}
-                                <Text style={{ color: getDurationColor(estimatedMinutes), fontWeight: '800' }}>
-                                    {estimatedMinutes} min
-                                </Text>{' '}
-                                · {getDurationLabel(estimatedMinutes)}
+                                <Text style={styles.estimateValue}>{estimatedMinutes} min</Text> ·{' '}
+                                {getDurationLabel(estimatedMinutes).toLowerCase()}
                             </Text>
                         </View>
 
@@ -455,7 +449,7 @@ export function CreateRoutineModal({ visible, onClose, onCreate, onUpdate, initi
                                     options={TIME_PER_REP_OPTIONS}
                                     value={draft.timePerRep}
                                     format={(v) => `${v}s`}
-                                    activeColor={COLORS.secondary}
+                                    activeColor={COLORS.primary}
                                     onSelect={(timePerRep) => patchDraft(draft.exercise.id, { timePerRep })}
                                 />
 
@@ -552,7 +546,7 @@ const styles = StyleSheet.create({
     },
     title: {
         fontSize: FONT_SIZES.xl,
-        fontWeight: '800',
+        fontFamily: FONTS.display,
         color: COLORS.textPrimary,
     },
     stepCounter: {
@@ -594,7 +588,7 @@ const styles = StyleSheet.create({
     },
     label: {
         fontSize: FONT_SIZES.xs,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
         color: COLORS.textSecondary,
         textTransform: 'uppercase',
         letterSpacing: 0.8,
@@ -658,7 +652,7 @@ const styles = StyleSheet.create({
     },
     exerciseName: {
         fontSize: FONT_SIZES.sm,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         color: COLORS.textPrimary,
     },
     exerciseMuscle: {
@@ -674,7 +668,7 @@ const styles = StyleSheet.create({
     summaryText: {
         fontSize: FONT_SIZES.sm,
         color: COLORS.textSecondary,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         textAlign: 'center',
     },
     estimateBanner: {
@@ -684,7 +678,11 @@ const styles = StyleSheet.create({
         padding: SPACING.md,
         borderRadius: BORDER_RADIUS.md,
         backgroundColor: COLORS.surface,
-        borderWidth: 1,
+    },
+    estimateValue: {
+        fontFamily: FONTS.display,
+        fontSize: 16,
+        color: COLORS.textPrimary,
     },
     estimateText: {
         fontSize: FONT_SIZES.sm,
@@ -709,7 +707,7 @@ const styles = StyleSheet.create({
         borderRadius: 14,
         textAlign: 'center',
         lineHeight: 28,
-        fontWeight: '800',
+        fontFamily: FONTS.display,
         fontSize: FONT_SIZES.sm,
         color: COLORS.textPrimary,
         overflow: 'hidden',
@@ -719,7 +717,7 @@ const styles = StyleSheet.create({
     },
     configName: {
         fontSize: FONT_SIZES.md,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
         color: COLORS.textPrimary,
     },
     configMuscle: {
@@ -751,7 +749,7 @@ const styles = StyleSheet.create({
     configFieldLabel: {
         fontSize: FONT_SIZES.xs,
         color: COLORS.textMuted,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
     },
     stepper: {
         flexDirection: 'row',
@@ -771,7 +769,7 @@ const styles = StyleSheet.create({
     },
     stepperValue: {
         fontSize: FONT_SIZES.md,
-        fontWeight: '800',
+        fontFamily: FONTS.display,
         color: COLORS.textPrimary,
     },
     repsInput: {
@@ -782,7 +780,7 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         color: COLORS.textPrimary,
         fontSize: FONT_SIZES.md,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
     },
     chipSection: {
         gap: SPACING.xs,
@@ -805,11 +803,11 @@ const styles = StyleSheet.create({
     },
     chipText: {
         fontSize: 11,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
         color: COLORS.textSecondary,
     },
     chipTextActive: {
-        color: '#FFF',
+        color: COLORS.onChalk,
     },
     notesInput: {
         backgroundColor: COLORS.surfaceLight,

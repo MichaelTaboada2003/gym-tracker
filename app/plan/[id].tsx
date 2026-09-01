@@ -2,24 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
+import { FONTS } from '../../constants/typography';
 import { usePlans, PlanWithRoutines, PlanDayInput } from '../../hooks/usePlans';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../components/ui/Button';
 import { formatMinutes } from '../../lib/utils';
 import { CreatePlanModal } from '../../components/plans/CreatePlanModal';
-
-// Color palette for days
-const DAY_COLORS = [
-    '#3B82F6', // Blue
-    '#10B981', // Green
-    '#8B5CF6', // Purple
-    '#F59E0B', // Amber
-    '#EC4899', // Pink
-    '#06B6D4', // Cyan
-    '#EF4444', // Red
-];
 
 export default function PlanDetailsScreen() {
     const { id } = useLocalSearchParams();
@@ -113,7 +102,7 @@ export default function PlanDetailsScreen() {
                     onPress={() => setIsEditModalVisible(true)}
                     style={[styles.headerBtn, styles.editBtn]}
                 >
-                    <Ionicons name="pencil" size={18} color={COLORS.secondary} />
+                    <Ionicons name="pencil" size={17} color={COLORS.textPrimary} />
                 </TouchableOpacity>
             </View>
 
@@ -122,20 +111,12 @@ export default function PlanDetailsScreen() {
                 showsVerticalScrollIndicator={false}
             >
                 {/* Hero Card */}
-                <LinearGradient
-                    colors={[COLORS.secondary + '30', COLORS.primary + '20', 'transparent']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.heroCard}
-                >
+                <View style={styles.heroCard}>
                     <View style={styles.heroContent}>
                         <View style={styles.heroIconContainer}>
-                            <LinearGradient
-                                colors={COLORS.gradients.secondary}
-                                style={styles.heroIcon}
-                            >
-                                <Ionicons name="calendar" size={32} color="#FFF" />
-                            </LinearGradient>
+                            <View style={styles.heroIcon}>
+                                <Ionicons name="calendar" size={26} color={COLORS.textSecondary} />
+                            </View>
                         </View>
 
                         <Text style={styles.planName}>{plan.name}</Text>
@@ -146,8 +127,8 @@ export default function PlanDetailsScreen() {
                         {/* Stats Row */}
                         <View style={styles.statsRow}>
                             <View style={styles.statItem}>
-                                <View style={[styles.statIconBg, { backgroundColor: COLORS.primary + '20' }]}>
-                                    <Ionicons name="calendar-outline" size={18} color={COLORS.primary} />
+                                <View style={[styles.statIconBg, { backgroundColor: COLORS.surfaceLight }]}>
+                                    <Ionicons name="calendar-outline" size={17} color={COLORS.textSecondary} />
                                 </View>
                                 <Text style={styles.statValue}>{stats.totalDays}</Text>
                                 <Text style={styles.statLabel}>días</Text>
@@ -156,8 +137,8 @@ export default function PlanDetailsScreen() {
                             <View style={styles.statDivider} />
 
                             <View style={styles.statItem}>
-                                <View style={[styles.statIconBg, { backgroundColor: COLORS.success + '20' }]}>
-                                    <Ionicons name="barbell" size={18} color={COLORS.success} />
+                                <View style={[styles.statIconBg, { backgroundColor: COLORS.surfaceLight }]}>
+                                    <Ionicons name="barbell" size={17} color={COLORS.textSecondary} />
                                 </View>
                                 <Text style={styles.statValue}>{stats.totalRoutines}</Text>
                                 <Text style={styles.statLabel}>rutinas</Text>
@@ -166,15 +147,15 @@ export default function PlanDetailsScreen() {
                             <View style={styles.statDivider} />
 
                             <View style={styles.statItem}>
-                                <View style={[styles.statIconBg, { backgroundColor: COLORS.warning + '20' }]}>
-                                    <Ionicons name="time" size={18} color={COLORS.warning} />
+                                <View style={[styles.statIconBg, { backgroundColor: COLORS.surfaceLight }]}>
+                                    <Ionicons name="time" size={17} color={COLORS.textSecondary} />
                                 </View>
                                 <Text style={styles.statValue}>{Math.round(stats.totalMinutes / 60) || stats.totalMinutes}</Text>
                                 <Text style={styles.statLabel}>{stats.totalMinutes >= 60 ? 'horas' : 'min'}</Text>
                             </View>
                         </View>
                     </View>
-                </LinearGradient>
+                </View>
 
                 {/* Day overview. Plan days are cycle positions ("Día 1…N"), not
                     weekdays — labelling them Lun/Mar implied a fixed calendar. */}
@@ -203,7 +184,7 @@ export default function PlanDetailsScreen() {
                                             <View
                                                 style={[
                                                     styles.weekDayDot,
-                                                    { backgroundColor: DAY_COLORS[index % DAY_COLORS.length] },
+                                                    
                                                 ]}
                                             />
                                         ) : (
@@ -227,8 +208,7 @@ export default function PlanDetailsScreen() {
 
                     <View style={styles.routinesList}>
                         {plan.items.map((item, index) => {
-                            const color = DAY_COLORS[index % DAY_COLORS.length];
-                            const routineMinutes = item.routine.estimated_duration;
+                                                        const routineMinutes = item.routine.estimated_duration;
 
                             return (
                                 <TouchableOpacity
@@ -238,13 +218,10 @@ export default function PlanDetailsScreen() {
                                     activeOpacity={0.7}
                                 >
                                     {/* Day indicator */}
-                                    <LinearGradient
-                                        colors={[color, color + 'CC']}
-                                        style={styles.dayBadge}
-                                    >
-                                        <Text style={styles.dayLabel}>DÍA</Text>
+                                    <View style={styles.dayBadge}>
+                                        <Text style={styles.dayLabel}>Día</Text>
                                         <Text style={styles.dayNumber}>{item.day_number}</Text>
-                                    </LinearGradient>
+                                    </View>
 
                                     {/* Routine info */}
                                     <View style={styles.routineInfo}>
@@ -261,19 +238,19 @@ export default function PlanDetailsScreen() {
 
                                         {item.notes && (
                                             <View style={styles.notesContainer}>
-                                                <Ionicons name="document-text-outline" size={12} color={COLORS.info} />
+                                                <Ionicons name="document-text-outline" size={12} color={COLORS.textMuted} />
                                                 <Text style={styles.notesText} numberOfLines={1}>{item.notes}</Text>
                                             </View>
                                         )}
                                     </View>
 
                                     <TouchableOpacity
-                                        style={[styles.playButton, { backgroundColor: color }]}
+                                        style={styles.playButton}
                                         onPress={() => handleStartRoutine(item.routine_id)}
                                         accessibilityRole="button"
                                         accessibilityLabel={`Empezar ${item.routine.name}`}
                                     >
-                                        <Ionicons name="play" size={16} color="#FFF" />
+                                        <Ionicons name="play" size={16} color={COLORS.onChalk} />
                                     </TouchableOpacity>
                                 </TouchableOpacity>
                             );
@@ -348,11 +325,11 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.surfaceLight,
     },
     editBtn: {
-        backgroundColor: COLORS.secondary + '20',
+        backgroundColor: COLORS.surfaceLight,
     },
     headerTitle: {
         fontSize: FONT_SIZES.lg,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         color: COLORS.textPrimary,
     },
     content: {
@@ -361,11 +338,9 @@ const styles = StyleSheet.create({
     },
     // Hero Card
     heroCard: {
-        borderRadius: BORDER_RADIUS.xl,
-        marginBottom: SPACING.xl,
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
-        overflow: 'hidden',
+        borderRadius: BORDER_RADIUS.lg,
+        padding: SPACING.lg,
+        backgroundColor: COLORS.surface,
     },
     heroContent: {
         padding: SPACING.lg,
@@ -375,18 +350,18 @@ const styles = StyleSheet.create({
         marginBottom: SPACING.md,
     },
     heroIcon: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
+        width: 52,
+        height: 52,
+        borderRadius: BORDER_RADIUS.md,
+        backgroundColor: COLORS.surfaceLight,
         alignItems: 'center',
         justifyContent: 'center',
     },
     planName: {
-        fontSize: 28,
-        fontWeight: '800',
+        fontFamily: FONTS.display,
+        fontSize: 30,
+        lineHeight: 32,
         color: COLORS.textPrimary,
-        textAlign: 'center',
-        marginBottom: SPACING.xs,
     },
     planDescription: {
         fontSize: FONT_SIZES.md,
@@ -417,9 +392,10 @@ const styles = StyleSheet.create({
         marginBottom: SPACING.xs,
     },
     statValue: {
-        fontSize: FONT_SIZES.xl,
-        fontWeight: '700',
+        fontFamily: FONTS.display,
+        fontSize: 22,
         color: COLORS.textPrimary,
+        fontVariant: ['tabular-nums'],
     },
     statLabel: {
         fontSize: 11,
@@ -455,7 +431,7 @@ const styles = StyleSheet.create({
     },
     weekDayName: {
         fontSize: 11,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         color: COLORS.textMuted,
         marginBottom: 4,
     },
@@ -463,9 +439,11 @@ const styles = StyleSheet.create({
         color: COLORS.primary,
     },
     weekDayDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
+        width: 5,
+        height: 5,
+        borderRadius: 2.5,
+        marginTop: 4,
+        backgroundColor: COLORS.textSecondary,
     },
     weekDayOff: {
         fontSize: 12,
@@ -480,7 +458,7 @@ const styles = StyleSheet.create({
     },
     sectionTitle: {
         fontSize: FONT_SIZES.md,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
         color: COLORS.textPrimary,
         marginBottom: SPACING.sm,
     },
@@ -492,7 +470,7 @@ const styles = StyleSheet.create({
     },
     sectionBadgeText: {
         fontSize: 12,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         color: COLORS.primary,
     },
     // Routines Section
@@ -512,32 +490,34 @@ const styles = StyleSheet.create({
         borderColor: COLORS.surfaceHighlight,
     },
     dayBadge: {
-        width: 52,
-        height: 52,
-        borderRadius: BORDER_RADIUS.md,
+        width: 46,
         alignItems: 'center',
         justifyContent: 'center',
-        marginRight: SPACING.md,
+        paddingVertical: SPACING.sm,
+        borderRadius: BORDER_RADIUS.md,
+        backgroundColor: COLORS.surfaceLight,
     },
     dayLabel: {
-        fontSize: 9,
-        fontWeight: '700',
-        color: 'rgba(255,255,255,0.8)',
-        letterSpacing: 1,
+        fontFamily: FONTS.medium,
+        fontSize: 8,
+        letterSpacing: 1.2,
+        textTransform: 'uppercase',
+        color: COLORS.textMuted,
     },
     dayNumber: {
-        fontSize: 20,
-        fontWeight: '800',
-        color: '#FFF',
+        fontFamily: FONTS.display,
+        fontSize: 22,
+        lineHeight: 24,
+        color: COLORS.textPrimary,
+        fontVariant: ['tabular-nums'],
     },
     routineInfo: {
         flex: 1,
     },
     routineName: {
-        fontSize: FONT_SIZES.md,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
+        fontSize: FONT_SIZES.sm,
         color: COLORS.textPrimary,
-        marginBottom: 4,
     },
     routineMetaRow: {
         flexDirection: 'row',
@@ -557,7 +537,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 4,
         marginTop: SPACING.xs,
-        backgroundColor: COLORS.info + '10',
+        backgroundColor: COLORS.surfaceLight,
         paddingHorizontal: SPACING.sm,
         paddingVertical: 3,
         borderRadius: BORDER_RADIUS.sm,
@@ -565,14 +545,16 @@ const styles = StyleSheet.create({
     },
     notesText: {
         fontSize: 11,
-        color: COLORS.info,
+        color: COLORS.textSecondary,
     },
     playButton: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+        width: 34,
+        height: 34,
+        borderRadius: BORDER_RADIUS.md,
+        backgroundColor: COLORS.primary,
         alignItems: 'center',
         justifyContent: 'center',
+        paddingLeft: 2,
     },
     // Timeline
     // Empty State
@@ -586,7 +568,7 @@ const styles = StyleSheet.create({
     },
     emptyTitle: {
         fontSize: FONT_SIZES.lg,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         color: COLORS.textPrimary,
         marginTop: SPACING.md,
     },
@@ -605,7 +587,7 @@ const styles = StyleSheet.create({
     },
     emptyButtonText: {
         fontSize: FONT_SIZES.sm,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         color: '#FFF',
     },
 });

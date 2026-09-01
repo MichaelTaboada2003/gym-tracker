@@ -1,9 +1,9 @@
 import React from 'react';
 import { View, Text, StyleSheet, Modal, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, getMuscleColor } from '../../constants/colors';
+import { FONTS } from '../../constants/typography';
 import { ExerciseInProgress } from '../../store/workoutStore';
 import { PersonalRecord } from '../../hooks/useWorkoutSession';
 import { formatMinutes, formatVolumeShort, formatWeight } from '../../lib/utils';
@@ -66,12 +66,9 @@ export function WorkoutSummaryModal({ visible, data, onClose }: WorkoutSummaryMo
                 >
                     {/* Success Icon */}
                     <View style={styles.successIconContainer}>
-                        <LinearGradient
-                            colors={COLORS.gradients.primary}
-                            style={styles.successIcon}
-                        >
-                            <Ionicons name="checkmark" size={48} color="#FFF" />
-                        </LinearGradient>
+                        <View style={styles.successIcon}>
+                            <Ionicons name="checkmark" size={44} color={COLORS.onChalk} />
+                        </View>
                     </View>
 
                     {/* Title */}
@@ -82,30 +79,24 @@ export function WorkoutSummaryModal({ visible, data, onClose }: WorkoutSummaryMo
 
                     {/* Main Stats Grid */}
                     <View style={styles.mainStatsGrid}>
-                        <LinearGradient
-                            colors={[COLORS.primary + '20', COLORS.primary + '10']}
-                            style={styles.mainStatCard}
-                        >
-                            <Ionicons name="time" size={24} color={COLORS.primary} />
+                        <View style={styles.mainStatCard}>
+                            <Ionicons name="time" size={20} color={COLORS.textSecondary} />
                             <Text style={styles.mainStatValue}>{formatMinutes(data.duration)}</Text>
                             <Text style={styles.mainStatLabel}>Duración</Text>
-                        </LinearGradient>
+                        </View>
 
-                        <LinearGradient
-                            colors={[COLORS.success + '20', COLORS.success + '10']}
-                            style={styles.mainStatCard}
-                        >
-                            <Ionicons name="barbell" size={24} color={COLORS.success} />
+                        <View style={styles.mainStatCard}>
+                            <Ionicons name="barbell" size={20} color={COLORS.textSecondary} />
                             <Text style={styles.mainStatValue}>{formatVolumeShort(data.totalVolume)}</Text>
-                            <Text style={styles.mainStatLabel}>Volumen (kg)</Text>
-                        </LinearGradient>
+                            <Text style={styles.mainStatLabel}>Volumen kg</Text>
+                        </View>
                     </View>
 
                     {/* Secondary Stats */}
                     <View style={styles.secondaryStats}>
                         <View style={styles.secondaryStat}>
-                            <View style={[styles.secondaryStatIcon, { backgroundColor: COLORS.info + '20' }]}>
-                                <Ionicons name="fitness" size={18} color={COLORS.info} />
+                            <View style={[styles.secondaryStatIcon, { backgroundColor: COLORS.surfaceLight }]}>
+                                <Ionicons name="barbell" size={17} color={COLORS.textSecondary} />
                             </View>
                             <View>
                                 <Text style={styles.secondaryStatValue}>{data.exercises.length}</Text>
@@ -116,8 +107,8 @@ export function WorkoutSummaryModal({ visible, data, onClose }: WorkoutSummaryMo
                         <View style={styles.statDivider} />
 
                         <View style={styles.secondaryStat}>
-                            <View style={[styles.secondaryStatIcon, { backgroundColor: COLORS.warning + '20' }]}>
-                                <Ionicons name="layers" size={18} color={COLORS.warning} />
+                            <View style={[styles.secondaryStatIcon, { backgroundColor: COLORS.surfaceLight }]}>
+                                <Ionicons name="layers" size={17} color={COLORS.textSecondary} />
                             </View>
                             <View>
                                 <Text style={styles.secondaryStatValue}>{data.totalSets}</Text>
@@ -128,8 +119,8 @@ export function WorkoutSummaryModal({ visible, data, onClose }: WorkoutSummaryMo
                         <View style={styles.statDivider} />
 
                         <View style={styles.secondaryStat}>
-                            <View style={[styles.secondaryStatIcon, { backgroundColor: COLORS.secondary + '20' }]}>
-                                <Ionicons name="repeat" size={18} color={COLORS.secondary} />
+                            <View style={[styles.secondaryStatIcon, { backgroundColor: COLORS.surfaceLight }]}>
+                                <Ionicons name="repeat" size={17} color={COLORS.textSecondary} />
                             </View>
                             <View>
                                 <Text style={styles.secondaryStatValue}>{data.totalReps}</Text>
@@ -250,26 +241,27 @@ const styles = StyleSheet.create({
         marginBottom: SPACING.lg,
     },
     successIcon: {
-        width: 88,
-        height: 88,
-        borderRadius: 44,
+        width: 80,
+        height: 80,
+        borderRadius: BORDER_RADIUS.xl,
+        backgroundColor: COLORS.primary,
         alignItems: 'center',
         justifyContent: 'center',
-        shadowColor: COLORS.primary,
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.4,
-        shadowRadius: 16,
     },
     title: {
-        fontSize: 28,
-        fontWeight: '800',
+        fontFamily: FONTS.display,
+        fontSize: 34,
+        lineHeight: 36,
         color: COLORS.textPrimary,
         textAlign: 'center',
         marginBottom: SPACING.xs,
     },
     routineName: {
-        fontSize: FONT_SIZES.md,
-        color: COLORS.textSecondary,
+        fontFamily: FONTS.medium,
+        fontSize: 11,
+        letterSpacing: 1.6,
+        textTransform: 'uppercase',
+        color: COLORS.textMuted,
         textAlign: 'center',
         marginBottom: SPACING.xl,
     },
@@ -282,20 +274,25 @@ const styles = StyleSheet.create({
     mainStatCard: {
         flex: 1,
         alignItems: 'center',
+        gap: 2,
         padding: SPACING.lg,
-        borderRadius: BORDER_RADIUS.xl,
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
+        borderRadius: BORDER_RADIUS.lg,
+        backgroundColor: COLORS.surface,
     },
     mainStatValue: {
-        fontSize: 32,
-        fontWeight: '800',
+        fontFamily: FONTS.display,
+        fontSize: 34,
+        lineHeight: 36,
         color: COLORS.textPrimary,
-        marginTop: SPACING.sm,
+        marginTop: SPACING.xs,
+        fontVariant: ['tabular-nums'],
     },
     mainStatLabel: {
-        fontSize: FONT_SIZES.sm,
-        color: COLORS.textSecondary,
+        fontFamily: FONTS.medium,
+        fontSize: 9,
+        letterSpacing: 1.2,
+        textTransform: 'uppercase',
+        color: COLORS.textMuted,
     },
     // Secondary Stats
     secondaryStats: {
@@ -304,8 +301,6 @@ const styles = StyleSheet.create({
         borderRadius: BORDER_RADIUS.lg,
         padding: SPACING.md,
         marginBottom: SPACING.xl,
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
     },
     secondaryStat: {
         flex: 1,
@@ -314,20 +309,24 @@ const styles = StyleSheet.create({
         gap: SPACING.sm,
     },
     secondaryStatIcon: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+        width: 32,
+        height: 32,
+        borderRadius: BORDER_RADIUS.sm,
         alignItems: 'center',
         justifyContent: 'center',
     },
     secondaryStatValue: {
-        fontSize: FONT_SIZES.lg,
-        fontWeight: '700',
+        fontFamily: FONTS.display,
+        fontSize: 20,
         color: COLORS.textPrimary,
+        fontVariant: ['tabular-nums'],
     },
     secondaryStatLabel: {
-        fontSize: 11,
+        fontFamily: FONTS.regular,
+        fontSize: 10,
         color: COLORS.textMuted,
+        textTransform: 'uppercase',
+        letterSpacing: 0.8,
     },
     statDivider: {
         width: 1,
@@ -343,9 +342,9 @@ const styles = StyleSheet.create({
     muscleGroupPill: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: SPACING.md,
-        paddingVertical: SPACING.sm,
-        borderRadius: BORDER_RADIUS.full,
+        paddingHorizontal: SPACING.sm,
+        paddingVertical: 5,
+        borderRadius: BORDER_RADIUS.sm,
         gap: 6,
     },
     muscleGroupDot: {
@@ -354,8 +353,10 @@ const styles = StyleSheet.create({
         borderRadius: 4,
     },
     muscleGroupText: {
-        fontSize: FONT_SIZES.sm,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
+        fontSize: 11,
+        letterSpacing: 0.4,
+        textTransform: 'uppercase',
     },
     // Sections
     section: {
@@ -368,26 +369,28 @@ const styles = StyleSheet.create({
         marginBottom: SPACING.md,
     },
     sectionTitle: {
-        fontSize: FONT_SIZES.md,
-        fontWeight: '700',
-        color: COLORS.textPrimary,
+        fontFamily: FONTS.medium,
+        fontSize: 10,
+        letterSpacing: 1.6,
+        textTransform: 'uppercase',
+        color: COLORS.textMuted,
         marginBottom: SPACING.md,
     },
     // Personal Records
     prCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: COLORS.warning + '10',
+        backgroundColor: COLORS.surface,
         borderRadius: BORDER_RADIUS.lg,
+        borderLeftWidth: 3,
+        borderLeftColor: COLORS.warning,
         padding: SPACING.md,
         marginBottom: SPACING.sm,
-        borderWidth: 1,
-        borderColor: COLORS.warning + '30',
     },
     prIcon: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        width: 36,
+        height: 36,
+        borderRadius: BORDER_RADIUS.sm,
         backgroundColor: COLORS.warning + '20',
         alignItems: 'center',
         justifyContent: 'center',
@@ -397,13 +400,15 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     prExercise: {
-        fontSize: FONT_SIZES.md,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
+        fontSize: FONT_SIZES.sm,
         color: COLORS.textPrimary,
     },
     prValue: {
-        fontSize: FONT_SIZES.sm,
-        color: COLORS.textSecondary,
+        fontFamily: FONTS.regular,
+        fontSize: 11,
+        color: COLORS.textMuted,
+        marginTop: 1,
     },
     prImprovement: {
         flexDirection: 'row',
@@ -416,7 +421,7 @@ const styles = StyleSheet.create({
     },
     prImprovementText: {
         fontSize: 12,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         color: COLORS.success,
     },
     // Exercise List
@@ -424,38 +429,38 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.surface,
         borderRadius: BORDER_RADIUS.lg,
         overflow: 'hidden',
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
     },
     exerciseRow: {
         flexDirection: 'row',
         alignItems: 'center',
         padding: SPACING.md,
-        borderBottomWidth: 1,
+        borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: COLORS.surfaceHighlight,
     },
     exerciseColorBar: {
-        width: 4,
-        height: 36,
-        borderRadius: 2,
+        width: 3,
+        height: 32,
         marginRight: SPACING.md,
     },
     exerciseInfo: {
         flex: 1,
     },
     exerciseRowName: {
-        fontSize: FONT_SIZES.md,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
+        fontSize: FONT_SIZES.sm,
         color: COLORS.textPrimary,
     },
     exerciseRowDetails: {
-        fontSize: 12,
+        fontFamily: FONTS.regular,
+        fontSize: 11,
         color: COLORS.textMuted,
+        marginTop: 1,
     },
     exerciseVolume: {
-        fontSize: FONT_SIZES.md,
-        fontWeight: '700',
+        fontFamily: FONTS.display,
+        fontSize: 16,
         color: COLORS.textSecondary,
+        fontVariant: ['tabular-nums'],
     },
     // Action
     actionContainer: {
@@ -465,7 +470,7 @@ const styles = StyleSheet.create({
         right: 0,
         padding: SPACING.lg,
         backgroundColor: COLORS.background,
-        borderTopWidth: 1,
+        borderTopWidth: StyleSheet.hairlineWidth,
         borderTopColor: COLORS.surfaceHighlight,
     },
 });

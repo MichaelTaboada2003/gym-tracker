@@ -3,9 +3,9 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, Fla
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
-import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
+import { keepAwake, notifySuccess, releaseKeepAwake } from '../../lib/feedback';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, getMuscleColor, HIT_SIZE } from '../../constants/colors';
+import { FONTS } from '../../constants/typography';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ExerciseCard } from '../../components/workout/ExerciseCard';
@@ -60,10 +60,8 @@ export default function WorkoutScreen() {
      */
     useEffect(() => {
         if (!isActive) return;
-        void activateKeepAwakeAsync(KEEP_AWAKE_TAG);
-        return () => {
-            void deactivateKeepAwake(KEEP_AWAKE_TAG);
-        };
+        keepAwake(KEEP_AWAKE_TAG);
+        return () => releaseKeepAwake(KEEP_AWAKE_TAG);
     }, [isActive]);
 
     const startFromRoutine = useCallback(
@@ -91,7 +89,7 @@ export default function WorkoutScreen() {
                         },
                     }))
                 );
-                void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                notifySuccess();
             } catch (error) {
                 console.error('[workout] could not start routine:', error);
                 Alert.alert('Error', 'No se pudo iniciar la rutina');
@@ -158,7 +156,7 @@ export default function WorkoutScreen() {
                     totalReps,
                     personalRecords: saved.personalRecords,
                 });
-                void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                notifySuccess();
             } catch (error) {
                 console.error('[workout] save failed:', error);
                 Alert.alert('Error', 'No se pudo guardar el entrenamiento. Inténtalo de nuevo.');
@@ -212,7 +210,7 @@ export default function WorkoutScreen() {
                     size="lg"
                     variant="gradient"
                     fullWidth
-                    icon={<Ionicons name="list" size={20} color="#FFF" />}
+                    icon={<Ionicons name="list" size={20} color={COLORS.onChalk} />}
                 />
                 <Button
                     title="Entrenamiento libre"
@@ -263,17 +261,15 @@ export default function WorkoutScreen() {
                 <View style={styles.headerStats}>
                     <View style={styles.headerStat}>
                         <Text style={styles.headerStatValue}>{completedSets}</Text>
-                        <Text style={styles.headerStatLabel}>SERIES</Text>
+                        <Text style={styles.headerStatLabel}>Series</Text>
                     </View>
-                    <View style={styles.headerDivider} />
                     <View style={styles.headerStat}>
                         <Text style={styles.headerStatValue}>{formatVolumeShort(totalVolume)}</Text>
-                        <Text style={styles.headerStatLabel}>VOLUMEN KG</Text>
+                        <Text style={styles.headerStatLabel}>Volumen kg</Text>
                     </View>
-                    <View style={styles.headerDivider} />
                     <View style={styles.headerStat}>
                         <Text style={styles.headerStatValue}>{exercises.length}</Text>
-                        <Text style={styles.headerStatLabel}>EJERCICIOS</Text>
+                        <Text style={styles.headerStatLabel}>Ejercicios</Text>
                     </View>
                 </View>
             </View>
@@ -324,7 +320,7 @@ export default function WorkoutScreen() {
                     size="lg"
                     variant="gradient"
                     fullWidth
-                    icon={<Ionicons name="checkmark-circle" size={20} color="#FFF" />}
+                    icon={<Ionicons name="checkmark-circle" size={20} color={COLORS.onChalk} />}
                 />
             </View>
 
@@ -501,7 +497,7 @@ function RoutinePicker({
                     }
                     renderItem={({ item }) => (
                         <TouchableOpacity style={styles.pickerItem} onPress={() => onSelect(item)}>
-                            <View style={[styles.pickerAccent, { backgroundColor: item.durationColor }]} />
+                            <View style={styles.pickerAccent} />
                             <View style={styles.pickerItemBody}>
                                 <Text style={styles.pickerItemName}>{item.name}</Text>
                                 <Text style={styles.pickerItemMeta}>
@@ -540,7 +536,7 @@ const styles = StyleSheet.create({
     },
     startTitle: {
         fontSize: FONT_SIZES.xl,
-        fontWeight: '800',
+        fontFamily: FONTS.display,
         color: COLORS.textPrimary,
         marginBottom: SPACING.sm,
     },
@@ -554,15 +550,14 @@ const styles = StyleSheet.create({
     workoutHeader: {
         backgroundColor: COLORS.surface,
         paddingBottom: SPACING.md,
-        paddingHorizontal: SPACING.md,
-        borderBottomWidth: 1,
+        paddingHorizontal: SPACING.lg,
+        borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: COLORS.surfaceHighlight,
     },
     headerTop: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: SPACING.md,
         gap: SPACING.sm,
     },
     headerTitleBlock: {
@@ -573,17 +568,14 @@ const styles = StyleSheet.create({
     },
     workoutTitle: {
         flexShrink: 1,
-        fontSize: FONT_SIZES.lg,
-        fontWeight: '700',
+        fontFamily: FONTS.display,
+        fontSize: 21,
+        letterSpacing: 0.2,
         color: COLORS.textPrimary,
     },
     liveIndicator: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: COLORS.error + '25',
-        paddingHorizontal: 9,
-        paddingVertical: 4,
-        borderRadius: BORDER_RADIUS.full,
         gap: 5,
     },
     liveDot: {
@@ -593,9 +585,9 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.error,
     },
     liveText: {
-        color: COLORS.error,
-        fontWeight: '700',
-        fontSize: 12,
+        fontFamily: FONTS.display,
+        fontSize: 15,
+        color: COLORS.textSecondary,
         fontVariant: ['tabular-nums'],
     },
     discardButton: {
@@ -607,30 +599,25 @@ const styles = StyleSheet.create({
     },
     headerStats: {
         flexDirection: 'row',
-        backgroundColor: COLORS.background,
-        borderRadius: BORDER_RADIUS.md,
-        paddingVertical: SPACING.sm,
+        marginTop: SPACING.md,
     },
     headerStat: {
         flex: 1,
-        alignItems: 'center',
-    },
-    headerDivider: {
-        width: 1,
-        backgroundColor: COLORS.surfaceHighlight,
-        marginVertical: 4,
     },
     headerStatLabel: {
+        fontFamily: FONTS.medium,
         fontSize: 9,
+        letterSpacing: 1.3,
+        textTransform: 'uppercase',
         color: COLORS.textMuted,
-        fontWeight: '700',
-        letterSpacing: 0.8,
-        marginTop: 2,
+        marginTop: 1,
     },
     headerStatValue: {
-        fontSize: FONT_SIZES.lg,
-        fontWeight: '800',
+        fontFamily: FONTS.display,
+        fontSize: 30,
+        lineHeight: 32,
         color: COLORS.textPrimary,
+        fontVariant: ['tabular-nums'],
     },
     exercisesList: {
         flex: 1,
@@ -662,7 +649,7 @@ const styles = StyleSheet.create({
     },
     modalTitle: {
         fontSize: FONT_SIZES.lg,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
         color: COLORS.textPrimary,
     },
     modalClose: {
@@ -710,13 +697,14 @@ const styles = StyleSheet.create({
         top: 0,
         bottom: 0,
         width: 3,
+        backgroundColor: COLORS.surfaceHighlight,
     },
     pickerItemBody: {
         flex: 1,
     },
     pickerItemName: {
         fontSize: FONT_SIZES.md,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         color: COLORS.textPrimary,
     },
     pickerItemMeta: {

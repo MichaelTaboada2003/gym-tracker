@@ -4,6 +4,7 @@ import { BarChart, PieChart } from 'react-native-gifted-charts';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
+import { FONTS } from '../../constants/typography';
 import { Card } from '../../components/ui/Card';
 import { storage } from '../../lib/localDatabase';
 import { useAdvancedStats } from '../../hooks/useAdvancedStats';
@@ -125,13 +126,13 @@ export default function StatsScreen() {
             setWeeklyVolume(weekDays.map((label, i) => ({
                 value: Math.round(volumeByDay[i]),
                 label,
-                frontColor: i === todayIndex ? COLORS.primary : COLORS.primaryLight,
+                frontColor: i === todayIndex ? COLORS.primary : COLORS.surfaceHighlight,
             })));
 
             setWeeklySessions(weekDays.map((label, i) => ({
                 value: sessionsByDay[i],
                 label,
-                frontColor: i === todayIndex ? COLORS.success : '#10B98180',
+                frontColor: i === todayIndex ? COLORS.primary : COLORS.surfaceHighlight,
             })));
 
         } catch (error) {
@@ -179,7 +180,7 @@ export default function StatsScreen() {
             >
 
                 {/* Weekly Activity Chart */}
-                <Card title={hasVolumeData ? "Volumen Semanal (kg)" : "Entrenamientos Semanal"}>
+                <Card title={hasVolumeData ? "Volumen de la semana" : "Sesiones de la semana"}>
                     <View style={styles.chartContainer}>
                         {hasVolumeData ? (
                             <BarChart
@@ -191,8 +192,8 @@ export default function StatsScreen() {
                                 frontColor={COLORS.primary}
                                 yAxisColor={'transparent'}
                                 xAxisColor={COLORS.surfaceHighlight}
-                                yAxisTextStyle={{ color: COLORS.textSecondary, fontSize: 10 }}
-                                xAxisLabelTextStyle={{ color: COLORS.textSecondary, fontSize: 11, fontWeight: '600' }}
+                                yAxisTextStyle={styles.axisText}
+                                xAxisLabelTextStyle={styles.axisLabel}
                                 noOfSections={4}
                                 maxValue={maxVolume}
                                 hideRules={true}
@@ -206,11 +207,11 @@ export default function StatsScreen() {
                                 height={150}
                                 barWidth={24}
                                 barBorderRadius={4}
-                                frontColor={COLORS.success}
+                                frontColor={COLORS.primary}
                                 yAxisColor={'transparent'}
                                 xAxisColor={COLORS.surfaceHighlight}
-                                yAxisTextStyle={{ color: COLORS.textSecondary, fontSize: 10 }}
-                                xAxisLabelTextStyle={{ color: COLORS.textSecondary, fontSize: 11, fontWeight: '600' }}
+                                yAxisTextStyle={styles.axisText}
+                                xAxisLabelTextStyle={styles.axisLabel}
                                 noOfSections={4}
                                 maxValue={Math.max(...weeklySessions.map(v => v.value), 3)}
                                 hideRules={true}
@@ -227,14 +228,14 @@ export default function StatsScreen() {
                 </Card>
 
                 {/* Muscle Group Distribution - Pie Chart */}
-                <Card title="Distribución por Grupo Muscular">
+                <Card title="Distribución por músculo">
                     {muscleGroupStats.length > 0 ? (
                         <View style={styles.chartContainer}>
                             <View style={styles.pieContainer}>
                                 <PieChart
                                     data={pieChartData}
                                     donut={true}
-                                    showGradient={true}
+                                    showGradient={false}
                                     sectionAutoFocus={true}
                                     radius={110}
                                     innerRadius={75}
@@ -270,7 +271,7 @@ export default function StatsScreen() {
                 </Card>
 
                 {/* Personal Records - 1RM */}
-                <Card title="Records Personales 🏆 (1RM Estimado)">
+                <Card title="Récords personales">
                     {topRecords.length > 0 ? (
                         <View style={styles.prList}>
                             {topRecords.map((record, index) => (
@@ -301,25 +302,25 @@ export default function StatsScreen() {
                 </Card>
 
                 {/* Overall Stats */}
-                <Card title="Estadísticas Generales">
+                <Card title="Totales">
                     <View style={styles.statsGrid}>
                         <View style={styles.statItem}>
-                            <Ionicons name="fitness" size={24} color={COLORS.primary} style={styles.statIcon} />
+                            <Ionicons name="barbell" size={20} color={COLORS.textSecondary} style={styles.statIcon} />
                             <Text style={styles.statValue}>{stats.totalWorkouts}</Text>
                             <Text style={styles.statLabel}>Entrenamientos</Text>
                         </View>
                         <View style={styles.statItem}>
-                            <Ionicons name="layers" size={24} color={COLORS.success} style={styles.statIcon} />
+                            <Ionicons name="layers" size={20} color={COLORS.textSecondary} style={styles.statIcon} />
                             <Text style={styles.statValue}>{stats.totalSets}</Text>
                             <Text style={styles.statLabel}>Series</Text>
                         </View>
                         <View style={styles.statItem}>
-                            <Ionicons name="barbell" size={24} color={COLORS.warning} style={styles.statIcon} />
+                            <Ionicons name="barbell" size={20} color={COLORS.textSecondary} style={styles.statIcon} />
                             <Text style={styles.statValue}>{formatVolume(stats.totalVolume)}</Text>
                             <Text style={styles.statLabel}>Volumen</Text>
                         </View>
                         <View style={styles.statItem}>
-                            <Ionicons name="time" size={24} color={COLORS.info} style={styles.statIcon} />
+                            <Ionicons name="time" size={20} color={COLORS.textSecondary} style={styles.statIcon} />
                             <Text style={styles.statValue}>{formatMinutes(stats.totalMinutes)}</Text>
                             <Text style={styles.statLabel}>Tiempo</Text>
                         </View>
@@ -336,6 +337,16 @@ export default function StatsScreen() {
 }
 
 const styles = StyleSheet.create({
+    axisText: {
+        fontFamily: FONTS.display,
+        color: COLORS.textMuted,
+        fontSize: 11,
+    },
+    axisLabel: {
+        fontFamily: FONTS.semibold,
+        color: COLORS.textSecondary,
+        fontSize: 11,
+    },
     container: {
         flex: 1,
         backgroundColor: COLORS.background,
@@ -359,8 +370,9 @@ const styles = StyleSheet.create({
         gap: SPACING.sm,
     },
     emptyChartText: {
+        fontFamily: FONTS.regular,
         fontSize: FONT_SIZES.sm,
-        color: COLORS.textSecondary,
+        color: COLORS.textMuted,
     },
     pieContainer: {
         alignItems: 'center',
@@ -373,20 +385,17 @@ const styles = StyleSheet.create({
         height: 150,
     },
     pieCenterValue: {
-        fontSize: 32,
-        fontWeight: '800',
+        fontFamily: FONTS.display,
+        fontSize: 34,
         color: COLORS.textPrimary,
-        textShadowColor: 'rgba(0,0,0,0.5)',
-        textShadowOffset: { width: 0, height: 2 },
-        textShadowRadius: 4,
+        fontVariant: ['tabular-nums'],
     },
     pieCenterLabel: {
-        fontSize: FONT_SIZES.xs,
-        color: COLORS.textSecondary,
+        fontFamily: FONTS.medium,
+        fontSize: 9,
+        letterSpacing: 1.4,
         textTransform: 'uppercase',
-        letterSpacing: 2,
-        fontWeight: '600',
-        marginTop: 4,
+        color: COLORS.textMuted,
     },
     legendContainer: {
         flexDirection: 'row',
@@ -398,13 +407,11 @@ const styles = StyleSheet.create({
     legendItemChip: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: COLORS.surfaceLight,
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: BORDER_RADIUS.full,
         gap: 6,
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
+        paddingHorizontal: 9,
+        paddingVertical: 5,
+        borderRadius: BORDER_RADIUS.sm,
+        backgroundColor: COLORS.surfaceLight,
     },
     legendDot: {
         width: 8,
@@ -412,14 +419,15 @@ const styles = StyleSheet.create({
         borderRadius: 4,
     },
     legendText: {
-        fontSize: FONT_SIZES.xs,
+        fontFamily: FONTS.medium,
+        fontSize: 11,
         color: COLORS.textSecondary,
-        fontWeight: '600',
     },
     legendValue: {
-        fontSize: FONT_SIZES.xs,
-        fontWeight: '700',
+        fontFamily: FONTS.display,
+        fontSize: 13,
         color: COLORS.textPrimary,
+        fontVariant: ['tabular-nums'],
     },
     prList: {
         gap: SPACING.sm,
@@ -427,55 +435,58 @@ const styles = StyleSheet.create({
     prItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: COLORS.surfaceLight,
-        borderRadius: BORDER_RADIUS.md,
-        padding: SPACING.md,
-        gap: SPACING.md,
+        gap: SPACING.sm,
+        paddingVertical: SPACING.sm,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: COLORS.surfaceHighlight,
     },
     prRank: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        backgroundColor: COLORS.primary + '20',
+        width: 26,
         alignItems: 'center',
-        justifyContent: 'center',
     },
     prRankText: {
-        fontSize: FONT_SIZES.sm,
-        fontWeight: '700',
-        color: COLORS.primary,
+        fontFamily: FONTS.display,
+        fontSize: 15,
+        color: COLORS.textMuted,
+        fontVariant: ['tabular-nums'],
     },
     prInfo: {
         flex: 1,
     },
     prExercise: {
-        fontSize: FONT_SIZES.md,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
+        fontSize: FONT_SIZES.sm,
         color: COLORS.textPrimary,
     },
     prDetails: {
-        fontSize: FONT_SIZES.sm,
-        color: COLORS.textSecondary,
+        fontFamily: FONTS.regular,
+        fontSize: 11,
+        color: COLORS.textMuted,
+        marginTop: 1,
     },
     prValue: {
         alignItems: 'flex-end',
     },
     pr1RM: {
-        fontSize: FONT_SIZES.xl,
-        fontWeight: '700',
-        color: COLORS.success,
+        fontFamily: FONTS.display,
+        fontSize: 24,
+        color: COLORS.textPrimary,
+        fontVariant: ['tabular-nums'],
     },
     prUnit: {
-        fontSize: FONT_SIZES.xs,
-        color: COLORS.textSecondary,
+        fontFamily: FONTS.medium,
+        fontSize: 10,
+        color: COLORS.textMuted,
+        marginLeft: 2,
     },
     emptyState: {
         alignItems: 'center',
         paddingVertical: SPACING.lg,
     },
     emptyText: {
+        fontFamily: FONTS.regular,
         fontSize: FONT_SIZES.sm,
-        color: COLORS.textSecondary,
+        color: COLORS.textMuted,
         textAlign: 'center',
     },
     statsGrid: {
@@ -495,14 +506,17 @@ const styles = StyleSheet.create({
         marginBottom: SPACING.xs,
     },
     statValue: {
-        fontSize: FONT_SIZES.xl,
-        fontWeight: '700',
+        fontFamily: FONTS.display,
+        fontSize: 24,
+        lineHeight: 26,
         color: COLORS.textPrimary,
+        fontVariant: ['tabular-nums'],
     },
     statLabel: {
-        fontSize: FONT_SIZES.xs,
-        color: COLORS.textSecondary,
-        marginTop: SPACING.xs,
-        textAlign: 'center',
+        fontFamily: FONTS.medium,
+        fontSize: 9,
+        letterSpacing: 1,
+        textTransform: 'uppercase',
+        color: COLORS.textMuted,
     },
 });

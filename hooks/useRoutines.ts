@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { storage, generateId, deleteRoutineCascade } from '../lib/localDatabase';
 import { Exercise, Routine, RoutineExercise } from '../lib/database.types';
-import {
-    estimateRoutineMinutes,
-    getDurationColor,
-    getDurationLabel,
-} from '../lib/durationCalculator';
+import { estimateRoutineMinutes, getDurationLabel } from '../lib/durationCalculator';
 import { parseTargetReps } from '../lib/utils';
 
 /** The exercise fields a routine card needs, denormalised onto each slot. */
@@ -21,7 +17,7 @@ export type RoutineWithExercises = Routine & {
     routine_exercises: (RoutineExercise & { exercise: RoutineExerciseSummary })[];
     /** Derived, not stored: minutes recomputed from the current exercise config. */
     calculatedDuration: number;
-    durationColor: string;
+    /** "Rápido" | "Moderado" | "Largo" | "Muy Largo". */
     durationLabel: string;
 };
 
@@ -79,7 +75,6 @@ function assemble(
         ...routine,
         routine_exercises: slots,
         calculatedDuration,
-        durationColor: getDurationColor(calculatedDuration),
         durationLabel: getDurationLabel(calculatedDuration),
     };
 }

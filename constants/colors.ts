@@ -1,58 +1,109 @@
+/**
+ * Colour system — "hierro y tiza" (iron and chalk).
+ *
+ * The rule the whole app follows: **the interface is monochrome; colour only
+ * ever means data.** Chrome, surfaces, buttons and icons are graphite and chalk.
+ * The one place hue appears is the muscle-group palette below, so a glance at a
+ * screen tells you what you trained, not where the designer put an accent.
+ *
+ * The muscle palette is borrowed from calibrated Olympic plates, and its
+ * structure carries information: push muscles are the red family, pull muscles
+ * the blue family, legs the green family.
+ */
+
+const IRON = {
+    /** Page background. Cool graphite, deliberately not a blue-cast slate. */
+    base: '#0C0D0F',
+    /** Cards and sheets. */
+    surface: '#141619',
+    /** Inputs, chips, pressed states. */
+    raised: '#1D2024',
+    /** Hairlines and dividers. */
+    rule: '#2A2E34',
+} as const;
+
+const CHALK = {
+    /** Primary text, and the fill of the primary button. */
+    full: '#F4F2ED',
+    /** Secondary text. */
+    smoke: '#8B9096',
+    /** Muted text, disabled chrome. */
+    ash: '#5A6068',
+} as const;
+
+/** Calibrated plate colours, brightened enough to stay legible on iron. */
+const PLATE = {
+    red: '#F0544C',
+    redLight: '#F79A8E',
+    blue: '#5B93E8',
+    blueLight: '#9CC2F5',
+    green: '#3FC46A',
+    greenLight: '#86E0A0',
+    yellow: '#F5CB55',
+    chrome: '#B5BDC5',
+    white: '#EDEAE4',
+} as const;
+
 export const COLORS = {
-    // Primary palette
-    primary: '#6366F1', // Indigo-500
-    primaryLight: '#818CF8', // Indigo-400
-    primaryDark: '#4F46E5', // Indigo-600
+    // Interface — monochrome by design. `primary` is chalk: the app has no
+    // brand hue of its own competing with the data.
+    primary: CHALK.full,
+    primaryLight: CHALK.full,
+    primaryDark: '#D8D5CE',
 
-    // Secondary/Accent palette (Teal/Cyan for vibrant contrasts)
-    secondary: '#14B8A6', // Teal-500
-    secondaryLight: '#2DD4BF', // Teal-400
-    secondaryDark: '#0D9488', // Teal-600
+    secondary: PLATE.chrome,
+    secondaryLight: '#CDD3D9',
+    secondaryDark: '#8C949B',
 
-    // Functional colors
-    success: '#10B981', // Emerald-500
-    warning: '#F59E0B', // Amber-500
-    error: '#EF4444', // Red-500
-    info: '#3B82F6', // Blue-500
+    // Status — drawn from the plate palette so warnings and records still read
+    // as part of the same world.
+    success: PLATE.green,
+    warning: PLATE.yellow,
+    error: PLATE.red,
+    info: PLATE.blue,
 
-    // Neutral palette (Premium Dark Theme)
-    background: '#0F172A', // Slate-900 (Main bg)
-    surface: '#1E293B', // Slate-800 (Cards)
-    surfaceLight: '#334155', // Slate-700 (Hover/Deep cards)
-    surfaceHighlight: '#475569', // Slate-600 (Borders/Dividers)
+    background: IRON.base,
+    surface: IRON.surface,
+    surfaceLight: IRON.raised,
+    surfaceHighlight: IRON.rule,
+    border: IRON.rule,
 
-    // Text colors
-    textPrimary: '#F1F5F9', // Slate-100
-    textSecondary: '#94A3B8', // Slate-400
-    textMuted: '#64748B', // Slate-500
-    textHighlight: '#E2E8F0', // Slate-200
+    textPrimary: CHALK.full,
+    textHighlight: CHALK.full,
+    textSecondary: CHALK.smoke,
+    textMuted: CHALK.ash,
 
-    // Muscle group colors (Vibrant)
-    chest: '#F87171', // Red-400
-    back: '#60A5FA', // Blue-400
-    shoulders: '#FBBF24', // Amber-400
-    arms: '#34D399', // Emerald-400
-    legs: '#A78BFA', // Violet-400
-    core: '#FB923C', // Orange-400
-    cardio: '#F472B6', // Pink-400
+    /** Text/icon colour to place on top of a chalk fill. */
+    onChalk: IRON.base,
 
-    // Gradients & Overlays
+    // Legacy single-muscle keys, kept pointing at the shared palette.
+    chest: PLATE.red,
+    back: PLATE.blue,
+    shoulders: PLATE.yellow,
+    arms: PLATE.redLight,
+    legs: PLATE.green,
+    core: PLATE.chrome,
+    cardio: PLATE.white,
+
+    /**
+     * Gradients are near-invisible on purpose: they add depth to a surface,
+     * never colour. The old vivid indigo/teal washes were doing the job that
+     * the muscle palette does now.
+     */
     gradients: {
-        primary: ['#6366F1', '#818CF8'] as const,
-        secondary: ['#14B8A6', '#2DD4BF'] as const,
-        dark: ['#1E293B', '#0F172A'] as const,
-        glass: ['rgba(30, 41, 59, 0.7)', 'rgba(30, 41, 59, 0.3)'] as const,
-        success: ['#10B981', '#34D399'] as const,
-        fire: ['#F59E0B', '#EF4444'] as const,
+        primary: ['#FFFFFF', '#D8D5CE'] as const,
+        secondary: [IRON.raised, IRON.surface] as const,
+        dark: [IRON.surface, IRON.base] as const,
+        glass: ['rgba(255,255,255,0.045)', 'rgba(255,255,255,0.015)'] as const,
+        success: [PLATE.green, PLATE.greenLight] as const,
+        fire: [PLATE.yellow, PLATE.red] as const,
     },
 
     overlay: {
-        light: 'rgba(255, 255, 255, 0.05)',
-        medium: 'rgba(255, 255, 255, 0.1)',
-        dark: 'rgba(0, 0, 0, 0.4)',
+        light: 'rgba(244,242,237,0.06)',
+        medium: 'rgba(244,242,237,0.10)',
+        dark: 'rgba(0,0,0,0.55)',
     },
-
-    border: '#334155', // Slate-700
 } as const;
 
 export const SPACING = {
@@ -64,40 +115,38 @@ export const SPACING = {
     xxl: 48,
 } as const;
 
-export const FONT_SIZES = {
-    xs: 12,
-    sm: 14,
-    md: 16,
-    lg: 18,
-    xl: 24,
-    xxl: 32,
-} as const;
+export { FONT_SIZES } from './typography';
 
+/**
+ * Corners are machined, not soft. Tightening the scale is what stops a screen
+ * full of cards from reading as a generic app shell.
+ */
 export const BORDER_RADIUS = {
-    sm: 8,
-    md: 12,
-    lg: 16,
-    xl: 24,
+    sm: 4,
+    md: 8,
+    lg: 12,
+    xl: 16,
     full: 9999,
 } as const;
 
 /**
- * One colour per muscle group, keyed by the Spanish label stored on exercises.
+ * One colour per muscle group.
  *
- * This used to be copy-pasted into six screens with three different palettes,
- * so the same muscle rendered in different colours depending on where you were.
+ * Grouped by movement pattern rather than picked at random: push is red, pull
+ * is blue, legs are green. Two exercises that train the same pattern look
+ * related on a routine card before you have read a single word.
  */
 export const MUSCLE_COLORS: Record<string, string> = {
-    Pecho: '#F87171',
-    Espalda: '#60A5FA',
-    Hombros: '#FBBF24',
-    Bíceps: '#34D399',
-    Tríceps: '#2DD4BF',
-    Piernas: '#A78BFA',
-    Glúteos: '#F472B6',
-    Core: '#FB923C',
-    Cardio: '#38BDF8',
-    Otros: '#94A3B8',
+    Pecho: PLATE.red,
+    Tríceps: PLATE.redLight,
+    Espalda: PLATE.blue,
+    Bíceps: PLATE.blueLight,
+    Piernas: PLATE.green,
+    Glúteos: PLATE.greenLight,
+    Hombros: PLATE.yellow,
+    Core: PLATE.chrome,
+    Cardio: PLATE.white,
+    Otros: CHALK.ash,
 };
 
 /** Colour for a muscle group label, falling back to the neutral "Otros" tone. */

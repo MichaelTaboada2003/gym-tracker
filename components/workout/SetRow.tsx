@@ -1,13 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Pressable, StyleSheet, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
-import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES } from '../../constants/colors';
+import { COLORS, SPACING, BORDER_RADIUS } from '../../constants/colors';
+import { FONTS } from '../../constants/typography';
 import { SetData } from '../../store/workoutStore';
 import { formatWeight } from '../../lib/utils';
+import { tapLight, tapMedium } from '../../lib/feedback';
 
 interface SetRowProps {
     set: SetData;
+    /** Muscle colour, used for the completed state so the row matches its rail. */
+    accentColor: string;
     previousWeight?: number;
     previousReps?: number;
     onUpdate: (data: Partial<SetData>) => void;
@@ -32,6 +35,7 @@ function NumericField({
     decimal,
     accessibilityLabel,
     completed,
+    accentColor,
 }: {
     value: number;
     onCommit: (next: number) => void;
@@ -39,9 +43,11 @@ function NumericField({
     decimal: boolean;
     accessibilityLabel: string;
     completed: boolean;
+    accentColor: string;
 }) {
     const [draft, setDraft] = useState<string | null>(null);
     const isFocused = useRef(false);
+    const [focused, setFocused] = useState(false);
 
     // Adopt external changes (pre-fill, undo) while the user is not typing.
     useEffect(() => {
@@ -52,13 +58,19 @@ function NumericField({
 
     return (
         <TextInput
-            style={[styles.input, completed && styles.completedInput]}
+            style={[
+                styles.input,
+                focused && styles.inputFocused,
+                completed && [styles.inputCompleted, { color: accentColor }],
+            ]}
             value={display}
             onFocus={() => {
                 isFocused.current = true;
+                setFocused(true);
             }}
             onBlur={() => {
                 isFocused.current = false;
+                setFocused(false);
                 setDraft(null);
             }}
             onChangeText={(text) => {
@@ -72,7 +84,7 @@ function NumericField({
             keyboardType={decimal ? 'decimal-pad' : 'number-pad'}
             selectTextOnFocus
             returnKeyType="done"
-            placeholder="0"
+            placeholder="—"
             placeholderTextColor={COLORS.textMuted}
             editable={editable}
             accessibilityLabel={accessibilityLabel}
@@ -80,14 +92,22 @@ function NumericField({
     );
 }
 
-export function SetRow({ set, previousWeight, previousReps, onUpdate, onToggle, onDelete }: SetRowProps) {
+/** One ruled line of the set ledger. */
+export function SetRow({
+    set,
+    accentColor,
+    previousWeight,
+    previousReps,
+    onUpdate,
+    onToggle,
+    onDelete,
+}: SetRowProps) {
     const [showRpe, setShowRpe] = useState(false);
 
     const handleToggle = () => {
         // Completing a set is the app's core gesture; confirm it in the hand.
-        void Haptics.impactAsync(
-            set.isCompleted ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium
-        );
+        if (set.isCompleted) tapLight();
+        else tapMedium();
         onToggle();
     };
 
@@ -105,68 +125,79 @@ export function SetRow({ set, previousWeight, previousReps, onUpdate, onToggle, 
     const hasPrevious = previousWeight !== undefined && previousWeight > 0;
 
     return (
-        <View>
-            <View style={[styles.container, set.isCompleted && styles.completedContainer]}>
-                {/* Long-press is the only place warmup / delete live, so it gets a hint chevron. */}
+        <View style={styles.wrapper}>
+            <View style={styles.row}>
+                {/* The set number doubles as the row's menu: warmup and delete
+                    have nowhere else to live in a five-column grid. */}
                 <TouchableOpacity
                     onPress={openSetMenu}
-                    onLongPress={openSetMenu}
-                    style={styles.setNumberContainer}
+                    style={styles.colSet}
                     accessibilityRole="button"
                     accessibilityLabel={`Opciones de la serie ${set.setNumber}`}
                 >
                     <Text
                         style={[
                             styles.setNumber,
-                            set.isCompleted && styles.completedText,
-                            set.isWarmup && styles.warmupText,
+                            set.isWarmup && styles.warmupNumber,
+                            set.isCompleted && !set.isWarmup && { color: accentColor },
                         ]}
                     >
                         {set.isWarmup ? 'W' : set.setNumber}
                     </Text>
                 </TouchableOpacity>
 
-                <View style={styles.previousContainer}>
+                {/* Last session sits a tone back, so today's numbers read on top of it. */}
+                <View style={styles.colPrev}>
                     <Text style={styles.previousText} numberOfLines={1}>
-                        {hasPrevious ? `${formatWeight(previousWeight)}kg × ${previousReps}` : '—'}
+                        {hasPrevious ? `${formatWeight(previousWeight)} × ${previousReps}` : '—'}
                     </Text>
                 </View>
 
-                <View style={styles.inputContainer}>
+                <View style={styles.colInput}>
                     <NumericField
                         value={set.weight}
                         onCommit={(weight) => onUpdate({ weight })}
                         editable={!set.isCompleted}
                         decimal
                         completed={set.isCompleted}
+                        accentColor={accentColor}
                         accessibilityLabel={`Peso de la serie ${set.setNumber}`}
                     />
                 </View>
 
-                <View style={styles.inputContainer}>
+                <View style={styles.colInput}>
                     <NumericField
                         value={set.reps}
                         onCommit={(reps) => onUpdate({ reps })}
                         editable={!set.isCompleted}
                         decimal={false}
                         completed={set.isCompleted}
+                        accentColor={accentColor}
                         accessibilityLabel={`Repeticiones de la serie ${set.setNumber}`}
                     />
                 </View>
 
-                <TouchableOpacity
-                    style={[styles.checkbox, set.isCompleted ? styles.checkboxChecked : styles.checkboxUnchecked]}
-                    onPress={handleToggle}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: set.isCompleted }}
-                    accessibilityLabel={`Completar serie ${set.setNumber}`}
-                >
-                    <Ionicons
-                        name="checkmark"
-                        size={18}
-                        color={set.isCompleted ? '#FFF' : COLORS.textMuted}
-                    />
-                </TouchableOpacity>
+                <View style={styles.colCheck}>
+                    <Pressable
+                        onPress={handleToggle}
+                        style={({ pressed }) => [
+                            styles.checkbox,
+                            set.isCompleted
+                                ? { backgroundColor: accentColor, borderColor: accentColor }
+                                : styles.checkboxIdle,
+                            pressed && styles.checkboxPressed,
+                        ]}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: set.isCompleted }}
+                        accessibilityLabel={`Completar serie ${set.setNumber}`}
+                    >
+                        {/* Nothing at all when pending: a greyed tick inside an
+                            empty box read as "already done, but disabled". */}
+                        {set.isCompleted && (
+                            <Ionicons name="checkmark" size={18} color={COLORS.onChalk} />
+                        )}
+                    </Pressable>
+                </View>
             </View>
 
             {set.isCompleted && (
@@ -177,13 +208,13 @@ export function SetRow({ set, previousWeight, previousReps, onUpdate, onToggle, 
                         accessibilityRole="button"
                         accessibilityLabel="Registrar esfuerzo percibido"
                     >
-                        <Text style={styles.rpeToggleText}>
+                        <Text style={[styles.rpeToggleText, set.rpe != null && styles.rpeToggleTextSet]}>
                             {set.rpe ? `RPE ${set.rpe}` : 'RPE'}
                         </Text>
                         <Ionicons
                             name={showRpe ? 'chevron-up' : 'chevron-down'}
-                            size={11}
-                            color={set.rpe ? COLORS.warning : COLORS.textMuted}
+                            size={10}
+                            color={set.rpe != null ? COLORS.warning : COLORS.textMuted}
                         />
                     </TouchableOpacity>
 
@@ -199,7 +230,9 @@ export function SetRow({ set, previousWeight, previousReps, onUpdate, onToggle, 
                                 accessibilityRole="button"
                                 accessibilityLabel={`RPE ${value}`}
                             >
-                                <Text style={[styles.rpeChipText, set.rpe === value && styles.rpeChipTextActive]}>
+                                <Text
+                                    style={[styles.rpeChipText, set.rpe === value && styles.rpeChipTextActive]}
+                                >
                                     {value}
                                 </Text>
                             </TouchableOpacity>
@@ -211,103 +244,117 @@ export function SetRow({ set, previousWeight, previousReps, onUpdate, onToggle, 
 }
 
 const styles = StyleSheet.create({
-    container: {
+    wrapper: {
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: COLORS.surfaceHighlight,
+    },
+    row: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 2,
+        paddingVertical: 5,
     },
-    completedContainer: {
-        backgroundColor: COLORS.success + '0D',
-        borderRadius: BORDER_RADIUS.sm,
-    },
-    setNumberContainer: {
-        width: 34,
+    // Column widths mirror the header in ExerciseCard.
+    colSet: {
+        width: 30,
         height: 40,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    setNumber: {
-        color: COLORS.textSecondary,
-        fontSize: FONT_SIZES.sm,
-        fontWeight: '700',
-    },
-    completedText: {
-        color: COLORS.success,
-    },
-    warmupText: {
-        color: COLORS.warning,
-    },
-    previousContainer: {
+    colPrev: {
         flex: 1,
         alignItems: 'center',
-        justifyContent: 'center',
         paddingHorizontal: 2,
     },
-    previousText: {
-        color: COLORS.textMuted,
-        fontSize: FONT_SIZES.xs,
-    },
-    inputContainer: {
+    colInput: {
         width: 62,
         paddingHorizontal: 3,
+    },
+    colCheck: {
+        width: 44,
+        alignItems: 'center',
+    },
+    setNumber: {
+        fontFamily: FONTS.display,
+        fontSize: 17,
+        color: COLORS.textSecondary,
+        fontVariant: ['tabular-nums'],
+    },
+    warmupNumber: {
+        color: COLORS.warning,
+        fontSize: 14,
+    },
+    previousText: {
+        fontFamily: FONTS.regular,
+        fontSize: 12,
+        color: COLORS.textMuted,
+        fontVariant: ['tabular-nums'],
     },
     input: {
         backgroundColor: COLORS.surfaceLight,
         color: COLORS.textPrimary,
+        fontFamily: FONTS.display,
+        fontSize: 19,
         borderRadius: BORDER_RADIUS.sm,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: 'transparent',
         textAlign: 'center',
-        paddingVertical: 9,
-        fontSize: FONT_SIZES.md,
-        fontWeight: '700',
+        paddingVertical: 7,
+        fontVariant: ['tabular-nums'],
     },
-    completedInput: {
+    inputFocused: {
+        borderColor: COLORS.textSecondary,
+    },
+    /** Once logged, the value is a record rather than a field. */
+    inputCompleted: {
         backgroundColor: 'transparent',
-        color: COLORS.success,
+        borderColor: 'transparent',
     },
     checkbox: {
-        width: 38,
-        height: 38,
+        width: 34,
+        height: 34,
         borderRadius: BORDER_RADIUS.sm,
+        borderWidth: 1.5,
         alignItems: 'center',
         justifyContent: 'center',
-        marginLeft: 6,
     },
-    checkboxUnchecked: {
-        backgroundColor: COLORS.surfaceLight,
-        borderWidth: 1,
+    checkboxIdle: {
         borderColor: COLORS.surfaceHighlight,
+        backgroundColor: 'transparent',
     },
-    checkboxChecked: {
-        backgroundColor: COLORS.success,
+    checkboxPressed: {
+        opacity: 0.6,
     },
     rpeRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
-        paddingLeft: 34,
-        paddingBottom: 6,
+        gap: 5,
+        paddingLeft: 30,
+        paddingBottom: 7,
         flexWrap: 'wrap',
     },
     rpeToggle: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 3,
-        paddingHorizontal: 8,
+        paddingHorizontal: 7,
         paddingVertical: 3,
-        borderRadius: BORDER_RADIUS.full,
+        borderRadius: BORDER_RADIUS.sm,
         backgroundColor: COLORS.surfaceLight,
     },
     rpeToggleText: {
-        fontSize: 10,
-        fontWeight: '700',
+        fontFamily: FONTS.semibold,
+        fontSize: 9,
+        letterSpacing: 0.8,
         color: COLORS.textMuted,
-        letterSpacing: 0.5,
+    },
+    rpeToggleTextSet: {
+        color: COLORS.warning,
     },
     rpeChip: {
-        minWidth: 28,
+        minWidth: 26,
         paddingVertical: 3,
         paddingHorizontal: 6,
-        borderRadius: BORDER_RADIUS.full,
+        borderRadius: BORDER_RADIUS.sm,
         backgroundColor: COLORS.surfaceLight,
         alignItems: 'center',
     },
@@ -315,11 +362,11 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.warning,
     },
     rpeChipText: {
+        fontFamily: FONTS.semibold,
         fontSize: 11,
-        fontWeight: '700',
         color: COLORS.textSecondary,
     },
     rpeChipTextActive: {
-        color: '#0F172A',
+        color: COLORS.onChalk,
     },
 });

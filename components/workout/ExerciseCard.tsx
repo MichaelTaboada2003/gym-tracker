@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Vibration } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable, Alert, Vibration } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import * as Haptics from 'expo-haptics';
-import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES, getMuscleColor } from '../../constants/colors';
+import { COLORS, SPACING, BORDER_RADIUS, getMuscleColor } from '../../constants/colors';
+import { FONTS } from '../../constants/typography';
 import { ExerciseInProgress, RestTimerState, useWorkoutStore } from '../../store/workoutStore';
 import { SetRow } from './SetRow';
-import { Button } from '../ui/Button';
+import { SetMarks } from '../ui/SetMarks';
 import { formatClock, formatSeconds, formatWeight } from '../../lib/utils';
+import { notifySuccess } from '../../lib/feedback';
 
 interface ExerciseCardProps {
     item: ExerciseInProgress;
@@ -21,12 +21,13 @@ interface ExerciseCardProps {
 const secondsLeft = (endsAt: number) => Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
 
 /**
- * Memoised: the screen re-renders on every keystroke, and store updates replace
- * only the exercise that actually changed, so untouched cards keep their
- * identity and skip rendering entirely.
+ * One exercise, laid out as a page of a training log: a plate-coloured rail
+ * down the edge, the set tally under the title, then the ruled ledger of sets.
  *
- * Actions are read straight from the store — zustand keeps those references
- * stable, which inline `onX` props from the parent would not.
+ * Memoised — the screen re-renders on every keystroke, and store updates replace
+ * only the exercise that actually changed, so untouched cards keep their
+ * identity and skip rendering entirely. Actions are read straight from the
+ * store, whose references are stable, unlike inline `onX` props.
  */
 export const ExerciseCard = React.memo(function ExerciseCard({
     item,
@@ -49,7 +50,6 @@ export const ExerciseCard = React.memo(function ExerciseCard({
 
     const workSets = sets.filter((s) => !s.isWarmup);
     const completedSets = workSets.filter((s) => s.isCompleted).length;
-    const progress = workSets.length > 0 ? (completedSets / workSets.length) * 100 : 0;
     const muscleColor = getMuscleColor(exercise.muscle_group);
 
     const isResting = restTimer !== null;
@@ -74,7 +74,7 @@ export const ExerciseCard = React.memo(function ExerciseCard({
             if (left <= 0 && !hasFiredRef.current) {
                 hasFiredRef.current = true;
                 Vibration.vibrate([0, 400, 150, 400]);
-                void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                notifySuccess();
                 stopRest();
             }
         };
@@ -84,9 +84,9 @@ export const ExerciseCard = React.memo(function ExerciseCard({
         return () => clearInterval(interval);
     }, [restTimer, stopRest]);
 
-    // Progress is measured against the timer's own (possibly adjusted) length —
-    // using the exercise default made the bar overflow after tapping "+15s".
-    const timerProgress = restTimer ? Math.min(100, (remaining / restTimer.durationSeconds) * 100) : 0;
+    // Measured against the timer's own (possibly adjusted) length — using the
+    // exercise default made the bar overflow after tapping "+15s".
+    const timerProgress = restTimer ? Math.min(1, remaining / restTimer.durationSeconds) : 0;
 
     const handleToggleSet = (setIndex: number) => {
         const target = sets[setIndex];
@@ -114,375 +114,325 @@ export const ExerciseCard = React.memo(function ExerciseCard({
 
     return (
         <View style={styles.container}>
-            <View style={[styles.accent, { backgroundColor: muscleColor }]} />
+            <View style={[styles.rail, { backgroundColor: muscleColor }]} />
 
-            <View style={styles.header}>
-                <View style={styles.headerContent}>
-                    <Text style={styles.exerciseName} numberOfLines={2}>
-                        {exercise.name}
-                    </Text>
-                    <View style={styles.headerMeta}>
-                        <Text style={[styles.muscleGroup, { color: muscleColor }]}>{exercise.muscle_group}</Text>
-                        {targetSets > 0 && targetReps ? (
-                            <>
-                                <Text style={styles.metaDot}>•</Text>
+            <View style={styles.body}>
+                <View style={styles.header}>
+                    <View style={styles.headerContent}>
+                        <Text style={styles.exerciseName} numberOfLines={2}>
+                            {exercise.name}
+                        </Text>
+                        <View style={styles.headerMeta}>
+                            <Text style={[styles.muscleGroup, { color: muscleColor }]}>
+                                {exercise.muscle_group}
+                            </Text>
+                            {targetSets > 0 && targetReps ? (
                                 <Text style={styles.targetText}>
-                                    Meta {targetSets} × {targetReps}
+                                    Meta {targetSets}×{targetReps}
                                 </Text>
-                            </>
-                        ) : null}
+                            ) : null}
+                        </View>
                     </View>
+
+                    <TouchableOpacity
+                        onPress={openMenu}
+                        style={styles.menuButton}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Opciones de ${exercise.name}`}
+                    >
+                        <Ionicons name="ellipsis-horizontal" size={18} color={COLORS.textMuted} />
+                    </TouchableOpacity>
                 </View>
 
-                <TouchableOpacity
-                    onPress={openMenu}
-                    style={styles.menuButton}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Opciones de ${exercise.name}`}
-                >
-                    <Ionicons name="ellipsis-horizontal" size={20} color={COLORS.textSecondary} />
-                </TouchableOpacity>
-            </View>
+                {/* Tally and rest share one line: how far in you are, and how
+                    long until the next set, is the whole between-sets question. */}
+                <View style={styles.tallyRow}>
+                    <SetMarks
+                        total={workSets.length}
+                        completed={completedSets}
+                        color={muscleColor}
+                        accessibilityLabel={`${completedSets} de ${workSets.length} series de ${exercise.name}`}
+                    />
 
-            <View style={styles.progressBarContainer}>
-                <View style={[styles.progressBar, { width: `${progress}%`, backgroundColor: muscleColor }]} />
-            </View>
-
-            {isResting ? (
-                <View style={styles.restTimerActive}>
-                    <LinearGradient
-                        colors={[COLORS.warning + '25', COLORS.warning + '10']}
-                        style={styles.restTimerGradient}
-                    >
-                        <View style={styles.timerProgressBg}>
-                            <View style={[styles.timerProgress, { width: `${timerProgress}%` }]} />
-                        </View>
-
-                        <View style={styles.restTimerContent}>
-                            <TouchableOpacity
-                                style={styles.timerAdjustBtn}
+                    {isResting ? (
+                        <View style={styles.restLive}>
+                            <Pressable
                                 onPress={() => adjustRest(-15)}
+                                style={styles.restStep}
                                 accessibilityLabel="Restar 15 segundos"
                             >
-                                <Text style={styles.timerAdjustText}>−15</Text>
-                            </TouchableOpacity>
+                                <Text style={styles.restStepText}>−15</Text>
+                            </Pressable>
 
-                            <View style={styles.restTimerCenter}>
-                                <Text style={styles.restTimerTime}>{formatClock(remaining)}</Text>
-                                <Text style={styles.restTimerLabel}>descanso</Text>
-                            </View>
+                            <Text style={styles.restClock}>{formatClock(remaining)}</Text>
 
-                            <TouchableOpacity
-                                style={styles.timerAdjustBtn}
+                            <Pressable
                                 onPress={() => adjustRest(15)}
+                                style={styles.restStep}
                                 accessibilityLabel="Sumar 15 segundos"
                             >
-                                <Text style={styles.timerAdjustText}>+15</Text>
-                            </TouchableOpacity>
+                                <Text style={styles.restStepText}>+15</Text>
+                            </Pressable>
 
-                            <TouchableOpacity
-                                style={styles.skipRestBtn}
+                            <Pressable
                                 onPress={stopRest}
+                                style={styles.restSkip}
                                 accessibilityLabel="Saltar descanso"
                             >
-                                <Ionicons name="play-skip-forward" size={16} color={COLORS.primary} />
-                            </TouchableOpacity>
+                                <Ionicons name="play-skip-forward" size={13} color={COLORS.onChalk} />
+                            </Pressable>
                         </View>
-                    </LinearGradient>
+                    ) : (
+                        <Pressable
+                            onPress={() => startRest(index, restSeconds)}
+                            style={styles.restIdle}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Iniciar descanso de ${formatSeconds(restSeconds)}`}
+                        >
+                            <Ionicons name="timer-outline" size={13} color={COLORS.textSecondary} />
+                            <Text style={styles.restIdleText}>{formatSeconds(restSeconds)}</Text>
+                        </Pressable>
+                    )}
                 </View>
-            ) : (
-                <TouchableOpacity
-                    style={styles.restTimeIndicator}
-                    onPress={() => startRest(index, restSeconds)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Iniciar descanso de ${formatSeconds(restSeconds)}`}
-                >
-                    <Ionicons name="hourglass-outline" size={14} color={COLORS.warning} />
-                    <Text style={styles.restTimeText}>
-                        Descanso <Text style={styles.restTimeValue}>{formatSeconds(restSeconds)}</Text>
-                    </Text>
-                    <View style={styles.startTimerHint}>
-                        <Ionicons name="play" size={9} color={COLORS.textSecondary} />
-                        <Text style={styles.startTimerHintText}>iniciar</Text>
+
+                {/* A hairline that drains as the rest runs out: readable at arm's
+                    length, and absent entirely when you are not resting. */}
+                {isResting && (
+                    <View style={styles.restTrack}>
+                        <View style={[styles.restTrackFill, { width: `${timerProgress * 100}%` }]} />
                     </View>
-                </TouchableOpacity>
-            )}
+                )}
 
-            {/* Coaching notes come from the routine and used to be swallowed by the
-                JSON blob that lived in the same field. */}
-            {notes ? (
-                <View style={styles.notesContainer}>
-                    <Ionicons name="information-circle-outline" size={15} color={COLORS.info} />
-                    <Text style={styles.notesText}>{notes}</Text>
-                </View>
-            ) : null}
+                {notes ? <Text style={styles.notesText}>{notes}</Text> : null}
 
-            {previousBest && previousBest.weight > 0 && (
-                <View style={styles.previousBest}>
-                    <Ionicons name="trophy-outline" size={13} color={COLORS.warning} />
+                {previousBest && previousBest.weight > 0 && (
                     <Text style={styles.previousBestText}>
-                        Mejor marca:{' '}
+                        Mejor marca{' '}
                         <Text style={styles.previousBestValue}>
-                            {formatWeight(previousBest.weight)}kg × {previousBest.reps}
+                            {formatWeight(previousBest.weight)} × {previousBest.reps}
                         </Text>
                     </Text>
+                )}
+
+                <View style={styles.ledger}>
+                    <View style={styles.setHeaders}>
+                        <Text style={[styles.setHeader, styles.colSet]}>Serie</Text>
+                        <Text style={[styles.setHeader, styles.colPrev]}>Anterior</Text>
+                        <Text style={[styles.setHeader, styles.colInput]}>kg</Text>
+                        <Text style={[styles.setHeader, styles.colInput]}>reps</Text>
+                        <View style={styles.colCheck} />
+                    </View>
+
+                    {sets.map((set, setIndex) => (
+                        <SetRow
+                            key={set.id}
+                            set={set}
+                            accentColor={muscleColor}
+                            previousWeight={set.previousWeight ?? previousBest?.weight}
+                            previousReps={set.previousReps ?? previousBest?.reps}
+                            onUpdate={(data) => updateSet(index, setIndex, data)}
+                            onToggle={() => handleToggleSet(setIndex)}
+                            onDelete={() => removeSet(index, setIndex)}
+                        />
+                    ))}
                 </View>
-            )}
 
-            <View style={styles.setHeaders}>
-                <Text style={[styles.setHeader, { width: 34 }]}>SERIE</Text>
-                <Text style={[styles.setHeader, { flex: 1 }]}>ANTERIOR</Text>
-                <Text style={[styles.setHeader, { width: 62 }]}>KG</Text>
-                <Text style={[styles.setHeader, { width: 62 }]}>REPS</Text>
-                <View style={{ width: 44 }} />
+                <Pressable
+                    onPress={() => addSet(index)}
+                    style={({ pressed }) => [styles.addSetBtn, pressed && styles.addSetPressed]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Añadir serie a ${exercise.name}`}
+                >
+                    <Ionicons name="add" size={15} color={COLORS.textSecondary} />
+                    <Text style={styles.addSetText}>Añadir serie</Text>
+                </Pressable>
             </View>
-
-            <View style={styles.setsContainer}>
-                {sets.map((set, setIndex) => (
-                    <SetRow
-                        key={set.id}
-                        set={set}
-                        previousWeight={set.previousWeight ?? previousBest?.weight}
-                        previousReps={set.previousReps ?? previousBest?.reps}
-                        onUpdate={(data) => updateSet(index, setIndex, data)}
-                        onToggle={() => handleToggleSet(setIndex)}
-                        onDelete={() => removeSet(index, setIndex)}
-                    />
-                ))}
-            </View>
-
-            <Button
-                title="Añadir Serie"
-                variant="secondary"
-                size="sm"
-                onPress={() => addSet(index)}
-                fullWidth
-                icon={<Ionicons name="add" size={16} color={COLORS.textPrimary} />}
-                style={styles.addSetBtn}
-            />
         </View>
     );
 });
 
 const styles = StyleSheet.create({
     container: {
+        flexDirection: 'row',
         backgroundColor: COLORS.surface,
         borderRadius: BORDER_RADIUS.lg,
-        padding: SPACING.md,
         marginBottom: SPACING.md,
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
         overflow: 'hidden',
     },
-    accent: {
-        position: 'absolute',
-        left: 0,
-        top: 0,
-        bottom: 0,
+    /** The plate-colour rail: the only colour on the card. */
+    rail: {
         width: 3,
+    },
+    body: {
+        flex: 1,
+        padding: SPACING.md,
     },
     header: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'flex-start',
-        marginBottom: SPACING.sm,
     },
     headerContent: {
         flex: 1,
         paddingRight: SPACING.xs,
     },
     exerciseName: {
-        fontSize: FONT_SIZES.lg,
-        fontWeight: '700',
+        fontFamily: FONTS.display,
+        fontSize: 22,
+        lineHeight: 24,
         color: COLORS.textPrimary,
-        letterSpacing: -0.3,
     },
     headerMeta: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
-        marginTop: 2,
+        gap: SPACING.sm,
+        marginTop: 3,
     },
     muscleGroup: {
-        fontSize: FONT_SIZES.xs,
-        fontWeight: '700',
+        fontFamily: FONTS.semibold,
+        fontSize: 10,
+        letterSpacing: 1.2,
         textTransform: 'uppercase',
-        letterSpacing: 0.5,
-    },
-    metaDot: {
-        color: COLORS.textMuted,
-        fontSize: FONT_SIZES.xs,
     },
     targetText: {
-        fontSize: FONT_SIZES.xs,
-        color: COLORS.textSecondary,
-        fontWeight: '600',
+        fontFamily: FONTS.regular,
+        fontSize: 11,
+        color: COLORS.textMuted,
     },
     menuButton: {
-        width: 36,
-        height: 36,
+        width: 32,
+        height: 32,
+        marginTop: -4,
+        marginRight: -6,
         alignItems: 'center',
         justifyContent: 'center',
-        borderRadius: 18,
     },
-    progressBarContainer: {
-        height: 4,
-        backgroundColor: COLORS.surfaceLight,
-        borderRadius: 2,
-        marginBottom: SPACING.sm,
-        overflow: 'hidden',
-    },
-    progressBar: {
-        height: '100%',
-    },
-    restTimeIndicator: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: COLORS.warning + '10',
-        paddingHorizontal: SPACING.sm,
-        paddingVertical: 7,
-        borderRadius: BORDER_RADIUS.sm,
-        marginBottom: SPACING.sm,
-        gap: 6,
-        borderWidth: 1,
-        borderColor: COLORS.warning + '25',
-    },
-    restTimeText: {
-        flex: 1,
-        fontSize: FONT_SIZES.sm,
-        color: COLORS.textSecondary,
-    },
-    restTimeValue: {
-        fontWeight: '700',
-        color: COLORS.warning,
-    },
-    startTimerHint: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 3,
-        backgroundColor: COLORS.surfaceLight,
-        paddingHorizontal: 7,
-        paddingVertical: 3,
-        borderRadius: BORDER_RADIUS.full,
-    },
-    startTimerHintText: {
-        fontSize: 10,
-        fontWeight: '600',
-        color: COLORS.textSecondary,
-    },
-    restTimerActive: {
-        marginBottom: SPACING.sm,
-        borderRadius: BORDER_RADIUS.md,
-        overflow: 'hidden',
-    },
-    restTimerGradient: {
-        paddingTop: SPACING.sm + 4,
-        paddingBottom: SPACING.sm,
-        paddingHorizontal: SPACING.sm,
-    },
-    timerProgressBg: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        height: 4,
-        backgroundColor: COLORS.surfaceLight,
-    },
-    timerProgress: {
-        height: '100%',
-        backgroundColor: COLORS.warning,
-    },
-    restTimerContent: {
+    tallyRow: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        gap: SPACING.sm,
+        marginTop: SPACING.sm + 2,
+        minHeight: 30,
     },
-    restTimerCenter: {
-        flex: 1,
+    restIdle: {
+        flexDirection: 'row',
         alignItems: 'center',
+        gap: 5,
+        paddingHorizontal: SPACING.sm,
+        paddingVertical: 5,
+        borderRadius: BORDER_RADIUS.sm,
+        backgroundColor: COLORS.surfaceLight,
     },
-    restTimerTime: {
+    restIdleText: {
+        fontFamily: FONTS.medium,
+        fontSize: 11,
+        color: COLORS.textSecondary,
+    },
+    restLive: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.xs,
+    },
+    restStep: {
+        paddingHorizontal: 7,
+        paddingVertical: 5,
+        borderRadius: BORDER_RADIUS.sm,
+        backgroundColor: COLORS.surfaceLight,
+    },
+    restStepText: {
+        fontFamily: FONTS.semibold,
+        fontSize: 11,
+        color: COLORS.textSecondary,
+    },
+    restClock: {
+        fontFamily: FONTS.display,
         fontSize: 26,
-        fontWeight: '800',
+        lineHeight: 28,
+        minWidth: 62,
+        textAlign: 'center',
         color: COLORS.warning,
         fontVariant: ['tabular-nums'],
     },
-    restTimerLabel: {
-        fontSize: 9,
-        fontWeight: '700',
-        color: COLORS.warning + 'AA',
-        textTransform: 'uppercase',
-        letterSpacing: 1,
-    },
-    timerAdjustBtn: {
-        minWidth: 44,
-        height: 34,
-        paddingHorizontal: SPACING.sm,
-        borderRadius: BORDER_RADIUS.sm,
-        backgroundColor: COLORS.surfaceLight,
+    restSkip: {
+        width: 28,
+        height: 26,
         alignItems: 'center',
         justifyContent: 'center',
-    },
-    timerAdjustText: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: COLORS.textSecondary,
-    },
-    skipRestBtn: {
-        width: 40,
-        height: 34,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: COLORS.primary + '25',
         borderRadius: BORDER_RADIUS.sm,
+        backgroundColor: COLORS.warning,
     },
-    notesContainer: {
-        flexDirection: 'row',
-        backgroundColor: COLORS.info + '10',
-        padding: SPACING.sm,
-        borderRadius: BORDER_RADIUS.sm,
-        marginBottom: SPACING.sm,
-        gap: SPACING.xs,
-        alignItems: 'flex-start',
+    restTrack: {
+        height: 2,
+        marginTop: SPACING.sm,
+        backgroundColor: COLORS.surfaceHighlight,
+        borderRadius: 1,
+        overflow: 'hidden',
+    },
+    restTrackFill: {
+        height: '100%',
+        backgroundColor: COLORS.warning,
     },
     notesText: {
-        flex: 1,
-        fontSize: FONT_SIZES.xs,
-        color: COLORS.textSecondary,
+        fontFamily: FONTS.regular,
+        fontSize: 12,
         lineHeight: 17,
-    },
-    previousBest: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: SPACING.sm,
-        gap: 5,
+        color: COLORS.textSecondary,
+        marginTop: SPACING.sm + 2,
+        paddingLeft: SPACING.sm,
+        borderLeftWidth: 2,
+        borderLeftColor: COLORS.surfaceHighlight,
     },
     previousBestText: {
-        fontSize: FONT_SIZES.xs,
+        fontFamily: FONTS.regular,
+        fontSize: 11,
         color: COLORS.textMuted,
+        marginTop: SPACING.sm,
     },
     previousBestValue: {
-        fontWeight: '700',
-        color: COLORS.warning,
+        fontFamily: FONTS.semibold,
+        color: COLORS.textSecondary,
+    },
+    /** Ruled block: hairlines, not gaps, so the sets read as one table. */
+    ledger: {
+        marginTop: SPACING.sm + 2,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: COLORS.surfaceHighlight,
     },
     setHeaders: {
         flexDirection: 'row',
-        marginBottom: 4,
+        alignItems: 'center',
+        paddingTop: SPACING.sm,
+        paddingBottom: 2,
     },
     setHeader: {
+        fontFamily: FONTS.medium,
         fontSize: 9,
+        letterSpacing: 1,
+        textTransform: 'uppercase',
         color: COLORS.textMuted,
-        fontWeight: '700',
         textAlign: 'center',
-        letterSpacing: 0.8,
     },
-    setsContainer: {
-        marginBottom: SPACING.sm,
-        gap: 4,
-    },
+    // Shared column widths keep the header and every row on one grid.
+    colSet: { width: 30 },
+    colPrev: { flex: 1 },
+    colInput: { width: 62 },
+    colCheck: { width: 44 },
     addSetBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 5,
+        marginTop: SPACING.sm,
+        paddingVertical: 9,
+        borderRadius: BORDER_RADIUS.sm,
+        borderWidth: StyleSheet.hairlineWidth,
         borderColor: COLORS.surfaceHighlight,
+    },
+    addSetPressed: {
         backgroundColor: COLORS.surfaceLight,
+    },
+    addSetText: {
+        fontFamily: FONTS.medium,
+        fontSize: 12,
+        color: COLORS.textSecondary,
     },
 });

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, ViewStyle, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES } from '../../constants/colors';
+import { FONTS } from '../../constants/typography';
 
 interface CardProps {
     children: React.ReactNode;
@@ -83,35 +84,24 @@ const styles = StyleSheet.create({
     },
     default: {
         backgroundColor: COLORS.surface,
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 2,
     },
     outlined: {
         backgroundColor: 'transparent',
-        borderWidth: 1,
+        borderWidth: StyleSheet.hairlineWidth,
         borderColor: COLORS.surfaceHighlight,
     },
     glass: {
-        backgroundColor: COLORS.surfaceLight, // Fallback / Base
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
-        // Note: Real glassmorphism on RN usually requires Expo BlurView
-        // mimicking it with semi-transparent styles for now
+        backgroundColor: COLORS.surfaceLight,
     },
     gradient: {
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
+        backgroundColor: COLORS.surface,
     },
     title: {
-        fontSize: FONT_SIZES.lg,
-        fontWeight: '700',
+        fontFamily: FONTS.display,
+        fontSize: 18,
+        letterSpacing: 0.3,
         color: COLORS.textPrimary,
-        marginBottom: SPACING.sm,
+        marginBottom: SPACING.md,
     },
     textWhite: {
         color: '#FFFFFF',

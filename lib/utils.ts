@@ -177,3 +177,28 @@ export function parseTargetReps(target: string | number | null | undefined, fall
     const value = Number(match[0]);
     return Number.isFinite(value) && value > 0 ? value : fallback;
 }
+
+// =============================================================================
+// Equipment
+// =============================================================================
+
+/**
+ * The bundled catalogue stores equipment as English slugs ("barbell") while the
+ * editor writes Spanish labels ("Barra"), so the list showed a mix of both.
+ * This normalises for display without rewriting stored data.
+ */
+const EQUIPMENT_LABELS: Record<string, string> = {
+    barbell: 'Barra',
+    dumbbell: 'Mancuernas',
+    machine: 'Máquina',
+    cable: 'Polea',
+    bodyweight: 'Peso corporal',
+    kettlebell: 'Kettlebell',
+    bands: 'Bandas',
+    other: 'Otro',
+};
+
+export function formatEquipment(equipment?: string | null): string {
+    if (!equipment) return '';
+    return EQUIPMENT_LABELS[equipment.trim().toLowerCase()] ?? equipment;
+}

@@ -2,8 +2,8 @@ import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, getMuscleColor } from '../../constants/colors';
+import { FONTS } from '../../constants/typography';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { CreateRoutineModal } from '../../components/routines/CreateRoutineModal';
@@ -136,7 +136,7 @@ export default function RoutinesScreen() {
             >
                 {plans.length > 0 && (
                     <View style={styles.section}>
-                        <SectionHeader icon="calendar" color={COLORS.secondary} title="Mis programas" count={plans.length} />
+                        <SectionHeader icon="calendar" color={COLORS.textMuted} title="Mis programas" count={plans.length} />
                         {plans.map((plan) => (
                             <PlanCard
                                 key={plan.id}
@@ -151,7 +151,7 @@ export default function RoutinesScreen() {
                 <View style={styles.section}>
                     <SectionHeader
                         icon="barbell"
-                        color={COLORS.primary}
+                        color={COLORS.textMuted}
                         title="Rutinas individuales"
                         count={routines.length}
                     />
@@ -240,12 +240,7 @@ const RoutineCard = React.memo(function RoutineCard({
 
     return (
         <TouchableOpacity style={styles.routineCard} onPress={onPress} onLongPress={onMenu} activeOpacity={0.75}>
-            <LinearGradient
-                colors={[accent + '18', 'transparent']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.routineGradient}
-            >
+            <View style={styles.routineGradient}>
                 <View style={[styles.accentBar, { backgroundColor: accent }]} />
 
                 <View style={styles.routineContent}>
@@ -269,7 +264,7 @@ const RoutineCard = React.memo(function RoutineCard({
                                 accessibilityRole="button"
                                 accessibilityLabel={`Empezar ${routine.name}`}
                             >
-                                <Ionicons name="play" size={16} color="#FFF" />
+                                <Ionicons name="play" size={16} color={COLORS.onChalk} />
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={styles.actionBtn}
@@ -303,26 +298,16 @@ const RoutineCard = React.memo(function RoutineCard({
 
                     <View style={styles.statsRow}>
                         <View style={styles.statItem}>
-                            <Ionicons name="time" size={14} color={routine.durationColor} />
-                            <Text style={[styles.statValue, { color: routine.durationColor }]}>
-                                {routine.calculatedDuration}
-                            </Text>
+                            <Text style={styles.statValue}>{routine.calculatedDuration}</Text>
                             <Text style={styles.statLabel}>min</Text>
                         </View>
                         <View style={styles.statItem}>
-                            <Ionicons name="barbell" size={14} color={COLORS.info} />
                             <Text style={styles.statValue}>{exerciseCount}</Text>
                             <Text style={styles.statLabel}>ejercicios</Text>
                         </View>
                         <View style={styles.statItem}>
-                            <Ionicons name="layers" size={14} color={COLORS.success} />
                             <Text style={styles.statValue}>{totalSets}</Text>
                             <Text style={styles.statLabel}>series</Text>
-                        </View>
-                        <View style={[styles.durationBadge, { backgroundColor: routine.durationColor + '20' }]}>
-                            <Text style={[styles.durationBadgeText, { color: routine.durationColor }]}>
-                                {routine.durationLabel}
-                            </Text>
                         </View>
                     </View>
 
@@ -332,11 +317,11 @@ const RoutineCard = React.memo(function RoutineCard({
                                 .slice(0, 3)
                                 .map((re) => re.exercise.name)
                                 .join(' · ')}
-                            {exerciseCount > 3 ? ` +${exerciseCount - 3}` : ''}
+                            {exerciseCount > 3 ? ` +${exerciseCount - 3} más` : ''}
                         </Text>
                     )}
                 </View>
-            </LinearGradient>
+            </View>
         </TouchableOpacity>
     );
 });
@@ -366,21 +351,17 @@ const styles = StyleSheet.create({
         gap: SPACING.xs,
     },
     sectionTitle: {
-        fontSize: FONT_SIZES.sm,
-        fontWeight: '700',
-        color: COLORS.textSecondary,
+        fontFamily: FONTS.medium,
+        fontSize: 10,
+        color: COLORS.textMuted,
         textTransform: 'uppercase',
-        letterSpacing: 1,
+        letterSpacing: 1.6,
     },
     sectionCount: {
-        fontSize: FONT_SIZES.xs,
-        fontWeight: '700',
+        fontFamily: FONTS.display,
+        fontSize: 14,
         color: COLORS.textMuted,
-        backgroundColor: COLORS.surface,
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        borderRadius: BORDER_RADIUS.full,
-        overflow: 'hidden',
+        fontVariant: ['tabular-nums'],
     },
     routinesList: {
         gap: SPACING.md,
@@ -389,14 +370,12 @@ const styles = StyleSheet.create({
         borderRadius: BORDER_RADIUS.lg,
         overflow: 'hidden',
         backgroundColor: COLORS.surface,
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
     },
     routineGradient: {
         flexDirection: 'row',
     },
     accentBar: {
-        width: 4,
+        width: 3,
     },
     routineContent: {
         flex: 1,
@@ -412,14 +391,15 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     routineName: {
-        fontSize: FONT_SIZES.md,
-        fontWeight: '700',
+        fontFamily: FONTS.display,
+        fontSize: 20,
+        lineHeight: 22,
         color: COLORS.textPrimary,
-        letterSpacing: -0.2,
     },
     routineDescription: {
-        fontSize: FONT_SIZES.xs,
-        color: COLORS.textSecondary,
+        fontFamily: FONTS.regular,
+        fontSize: 12,
+        color: COLORS.textMuted,
         marginTop: 2,
     },
     actionButtons: {
@@ -430,7 +410,7 @@ const styles = StyleSheet.create({
     startBtn: {
         width: 34,
         height: 34,
-        borderRadius: 17,
+        borderRadius: BORDER_RADIUS.md,
         backgroundColor: COLORS.primary,
         alignItems: 'center',
         justifyContent: 'center',
@@ -439,7 +419,7 @@ const styles = StyleSheet.create({
     actionBtn: {
         width: 34,
         height: 34,
-        borderRadius: 17,
+        borderRadius: BORDER_RADIUS.md,
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: COLORS.surfaceLight,
@@ -453,9 +433,9 @@ const styles = StyleSheet.create({
     muscleGroupPill: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 8,
+        paddingHorizontal: 7,
         paddingVertical: 3,
-        borderRadius: BORDER_RADIUS.full,
+        borderRadius: BORDER_RADIUS.sm,
         gap: 5,
     },
     muscleGroupDot: {
@@ -464,17 +444,19 @@ const styles = StyleSheet.create({
         borderRadius: 3,
     },
     muscleGroupText: {
-        fontSize: 11,
-        fontWeight: '700',
+        fontFamily: FONTS.semibold,
+        fontSize: 10,
+        letterSpacing: 0.4,
+        textTransform: 'uppercase',
     },
     moreGroups: {
         fontSize: 11,
         color: COLORS.textMuted,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
     },
     statsRow: {
         flexDirection: 'row',
-        alignItems: 'center',
+        alignItems: 'baseline',
         gap: SPACING.md,
     },
     statItem: {
@@ -483,26 +465,24 @@ const styles = StyleSheet.create({
         gap: 4,
     },
     statValue: {
-        fontSize: FONT_SIZES.sm,
-        fontWeight: '700',
+        fontFamily: FONTS.display,
+        fontSize: 17,
         color: COLORS.textPrimary,
+        fontVariant: ['tabular-nums'],
     },
     statLabel: {
-        fontSize: 11,
-        color: COLORS.textMuted,
-    },
-    durationBadge: {
-        marginLeft: 'auto',
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: BORDER_RADIUS.full,
-    },
-    durationBadgeText: {
+        fontFamily: FONTS.regular,
         fontSize: 10,
-        fontWeight: '700',
+        color: COLORS.textMuted,
+        textTransform: 'uppercase',
+        letterSpacing: 0.6,
     },
     exercisePreviewList: {
-        fontSize: FONT_SIZES.xs,
+        fontFamily: FONTS.regular,
+        fontSize: 11,
         color: COLORS.textMuted,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: COLORS.surfaceHighlight,
+        paddingTop: SPACING.sm,
     },
 });

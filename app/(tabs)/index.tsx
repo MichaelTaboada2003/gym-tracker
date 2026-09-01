@@ -4,13 +4,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
+import { FONTS } from '../../constants/typography';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { SetMarks } from '../../components/ui/SetMarks';
 import { BodyWeightWidget } from '../../components/home/BodyWeightWidget';
 import { useHomeStats } from '../../hooks/useHomeStats';
 import { useRefreshOnFocus } from '../../hooks/useRefreshOnFocus';
 import { useWorkoutStore } from '../../store/workoutStore';
-import { formatMinutes, formatRelativeDate, formatVolumeShort } from '../../lib/utils';
+import { formatMinutes, formatRelativeDate, formatVolume, formatVolumeShort } from '../../lib/utils';
 
 /** Sessions per week the weekly ring fills up to. */
 const WEEKLY_GOAL = 4;
@@ -23,8 +25,6 @@ export default function HomeScreen() {
 
     // Finishing a workout on another tab has to be reflected here immediately.
     useRefreshOnFocus(fetchHomeData);
-
-    const goalProgress = Math.min(1, stats.thisWeekSessions / WEEKLY_GOAL);
 
     return (
         <View style={styles.container}>
@@ -62,7 +62,7 @@ export default function HomeScreen() {
                             style={styles.resumeGradient}
                         >
                             <View style={styles.resumeIcon}>
-                                <Ionicons name="barbell" size={22} color="#FFF" />
+                                <Ionicons name="barbell" size={22} color={COLORS.onChalk} />
                             </View>
                             <View style={styles.resumeBody}>
                                 <Text style={styles.resumeTitle}>Entrenamiento en curso</Text>
@@ -70,7 +70,7 @@ export default function HomeScreen() {
                                     {activeRoutineName || 'Entrenamiento libre'}
                                 </Text>
                             </View>
-                            <Ionicons name="chevron-forward" size={20} color="#FFF" />
+                            <Ionicons name="chevron-forward" size={20} color={COLORS.onChalk} />
                         </LinearGradient>
                     </TouchableOpacity>
                 ) : (
@@ -116,14 +116,12 @@ export default function HomeScreen() {
                             </Text>
                             <Text style={styles.goalLabel}>sesiones</Text>
                         </View>
-                        <View style={styles.goalTrack}>
-                            <LinearGradient
-                                colors={COLORS.gradients.primary}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 0 }}
-                                style={[styles.goalFill, { width: `${goalProgress * 100}%` }]}
-                            />
-                        </View>
+                        <SetMarks
+                            total={Math.max(WEEKLY_GOAL, stats.thisWeekSessions)}
+                            completed={stats.thisWeekSessions}
+                            size="md"
+                            accessibilityLabel={`${stats.thisWeekSessions} de ${WEEKLY_GOAL} sesiones esta semana`}
+                        />
                         <Text style={styles.goalCaption}>
                             {stats.thisWeekSessions >= WEEKLY_GOAL
                                 ? '¡Objetivo semanal cumplido!'
@@ -134,19 +132,19 @@ export default function HomeScreen() {
                     <View style={styles.statsGrid}>
                         <StatTile
                             icon="trending-up-outline"
-                            color={COLORS.success}
+                            color={COLORS.textSecondary}
                             value={formatVolumeShort(stats.thisWeekVolume)}
                             label="Volumen semanal"
                         />
                         <StatTile
                             icon="layers-outline"
-                            color={COLORS.secondaryLight}
+                            color={COLORS.textSecondary}
                             value={String(stats.totalWorkouts)}
                             label="Sesiones totales"
                         />
                         <StatTile
                             icon="barbell-outline"
-                            color={COLORS.primaryLight}
+                            color={COLORS.textSecondary}
                             value={formatVolumeShort(stats.totalVolume)}
                             label="Volumen total"
                         />
@@ -186,7 +184,7 @@ export default function HomeScreen() {
                                     ]}
                                 >
                                     <View style={styles.recentIcon}>
-                                        <Ionicons name="fitness" size={18} color={COLORS.primary} />
+                                        <Ionicons name="barbell" size={17} color={COLORS.textSecondary} />
                                     </View>
                                     <View style={styles.recentInfo}>
                                         <Text style={styles.recentName} numberOfLines={1}>
@@ -197,7 +195,7 @@ export default function HomeScreen() {
                                             {formatMinutes(workout.durationMinutes)}
                                         </Text>
                                     </View>
-                                    <Text style={styles.recentVolume}>{formatVolumeShort(workout.volume)} kg</Text>
+                                    <Text style={styles.recentVolume}>{formatVolume(workout.volume)}</Text>
                                 </View>
                             ))}
                         </View>
@@ -221,11 +219,9 @@ function StatTile({
 }) {
     return (
         <View style={styles.statItem}>
-            <LinearGradient colors={COLORS.gradients.glass} style={styles.statGradient}>
-                <Ionicons name={icon} size={20} color={color} />
-                <Text style={styles.statValue}>{value}</Text>
-                <Text style={styles.statLabel}>{label}</Text>
-            </LinearGradient>
+            <Ionicons name={icon} size={16} color={color} />
+            <Text style={styles.statValue}>{value}</Text>
+            <Text style={styles.statLabel}>{label}</Text>
         </View>
     );
 }
@@ -253,13 +249,14 @@ const styles = StyleSheet.create({
         marginBottom: SPACING.md,
     },
     sectionTitle: {
-        fontSize: FONT_SIZES.lg,
-        fontWeight: '700',
+        fontFamily: FONTS.display,
+        fontSize: 20,
+        letterSpacing: 0.3,
         color: COLORS.textPrimary,
     },
     linkText: {
         fontSize: FONT_SIZES.sm,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         color: COLORS.primaryLight,
     },
     resumeCard: {
@@ -276,8 +273,8 @@ const styles = StyleSheet.create({
     resumeIcon: {
         width: 42,
         height: 42,
-        borderRadius: 21,
-        backgroundColor: 'rgba(255,255,255,0.2)',
+        borderRadius: BORDER_RADIUS.md,
+        backgroundColor: 'rgba(12,13,15,0.12)',
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -285,14 +282,15 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     resumeTitle: {
+        fontFamily: FONTS.bold,
         fontSize: FONT_SIZES.md,
-        fontWeight: '700',
-        color: '#FFF',
+        color: COLORS.onChalk,
     },
     resumeSubtitle: {
+        fontFamily: FONTS.regular,
         fontSize: FONT_SIZES.xs,
-        color: 'rgba(255,255,255,0.8)',
-        marginTop: 2,
+        color: 'rgba(12,13,15,0.7)',
+        marginTop: 1,
     },
     startCard: {
         flexDirection: 'row',
@@ -301,22 +299,20 @@ const styles = StyleSheet.create({
         padding: SPACING.md,
         borderRadius: BORDER_RADIUS.lg,
         backgroundColor: COLORS.surface,
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
         marginBottom: SPACING.xl,
     },
     startIcon: {
         width: 42,
         height: 42,
-        borderRadius: 21,
-        backgroundColor: COLORS.primary + '20',
+        borderRadius: BORDER_RADIUS.md,
+        backgroundColor: COLORS.surfaceLight,
         alignItems: 'center',
         justifyContent: 'center',
         paddingLeft: 3,
     },
     startTitle: {
+        fontFamily: FONTS.bold,
         fontSize: FONT_SIZES.md,
-        fontWeight: '700',
         color: COLORS.textPrimary,
     },
     startSubtitle: {
@@ -328,26 +324,22 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 4,
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderRadius: BORDER_RADIUS.full,
+        paddingHorizontal: 9,
+        paddingVertical: 4,
+        borderRadius: BORDER_RADIUS.sm,
         backgroundColor: COLORS.warning + '18',
-        borderWidth: 1,
-        borderColor: COLORS.warning + '30',
     },
     streakText: {
+        fontFamily: FONTS.semibold,
         color: COLORS.warning,
-        fontWeight: '700',
-        fontSize: FONT_SIZES.xs,
+        fontSize: 11,
     },
     goalCard: {
         backgroundColor: COLORS.surface,
         borderRadius: BORDER_RADIUS.lg,
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
         padding: SPACING.md,
         marginBottom: SPACING.sm,
-        gap: SPACING.sm,
+        gap: SPACING.md,
     },
     goalHeader: {
         flexDirection: 'row',
@@ -355,32 +347,27 @@ const styles = StyleSheet.create({
         gap: SPACING.xs,
     },
     goalValue: {
-        fontSize: 30,
-        fontWeight: '800',
+        fontFamily: FONTS.display,
+        fontSize: 40,
+        lineHeight: 42,
         color: COLORS.textPrimary,
-        letterSpacing: -1,
+        fontVariant: ['tabular-nums'],
     },
     goalTarget: {
-        fontSize: FONT_SIZES.lg,
-        fontWeight: '600',
+        fontFamily: FONTS.display,
+        fontSize: 22,
         color: COLORS.textMuted,
     },
     goalLabel: {
-        fontSize: FONT_SIZES.sm,
+        fontFamily: FONTS.medium,
+        fontSize: 10,
+        letterSpacing: 1.4,
+        textTransform: 'uppercase',
         color: COLORS.textSecondary,
     },
-    goalTrack: {
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: COLORS.surfaceLight,
-        overflow: 'hidden',
-    },
-    goalFill: {
-        height: '100%',
-        borderRadius: 4,
-    },
     goalCaption: {
-        fontSize: FONT_SIZES.xs,
+        fontFamily: FONTS.regular,
+        fontSize: 12,
         color: COLORS.textMuted,
     },
     statsGrid: {
@@ -389,36 +376,29 @@ const styles = StyleSheet.create({
     },
     statItem: {
         flex: 1,
-    },
-    statGradient: {
+        gap: 5,
         paddingVertical: SPACING.md,
-        paddingHorizontal: SPACING.xs,
+        paddingHorizontal: SPACING.sm,
         borderRadius: BORDER_RADIUS.lg,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: COLORS.overlay.light,
-        minHeight: 96,
-        justifyContent: 'center',
-        gap: 4,
+        backgroundColor: COLORS.surface,
     },
     statValue: {
-        fontSize: 22,
-        fontWeight: '800',
+        fontFamily: FONTS.display,
+        fontSize: 24,
+        lineHeight: 26,
         color: COLORS.textPrimary,
+        fontVariant: ['tabular-nums'],
     },
     statLabel: {
+        fontFamily: FONTS.medium,
         fontSize: 9,
-        color: COLORS.textSecondary,
-        textAlign: 'center',
+        color: COLORS.textMuted,
         textTransform: 'uppercase',
-        letterSpacing: 0.6,
-        fontWeight: '700',
+        letterSpacing: 0.9,
     },
     recentList: {
         backgroundColor: COLORS.surface,
         borderRadius: BORDER_RADIUS.lg,
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
         paddingHorizontal: SPACING.md,
     },
     recentItem: {
@@ -426,16 +406,16 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: SPACING.md,
         paddingVertical: SPACING.md,
-        borderBottomWidth: 1,
+        borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: COLORS.surfaceHighlight,
     },
     recentItemLast: {
         borderBottomWidth: 0,
     },
     recentIcon: {
-        width: 38,
-        height: 38,
-        borderRadius: 19,
+        width: 34,
+        height: 34,
+        borderRadius: BORDER_RADIUS.sm,
         backgroundColor: COLORS.surfaceLight,
         alignItems: 'center',
         justifyContent: 'center',
@@ -445,7 +425,7 @@ const styles = StyleSheet.create({
     },
     recentName: {
         fontSize: FONT_SIZES.sm,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         color: COLORS.textPrimary,
     },
     recentMeta: {
@@ -454,8 +434,9 @@ const styles = StyleSheet.create({
         marginTop: 2,
     },
     recentVolume: {
-        fontSize: FONT_SIZES.xs,
-        fontWeight: '700',
+        fontFamily: FONTS.display,
+        fontSize: 15,
         color: COLORS.textSecondary,
+        fontVariant: ['tabular-nums'],
     },
 });

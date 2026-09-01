@@ -17,13 +17,14 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, getMuscleColor, HIT_SIZE } from '../../constants/colors';
+import { FONTS } from '../../constants/typography';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Button } from '../../components/ui/Button';
 import { useExercises, ExerciseDraft } from '../../hooks/useExercises';
 import { useRefreshOnFocus } from '../../hooks/useRefreshOnFocus';
 import { Exercise } from '../../lib/database.types';
-import { formatSeconds } from '../../lib/utils';
+import { formatEquipment, formatSeconds } from '../../lib/utils';
 
 const MUSCLE_GROUPS = ['Pecho', 'Espalda', 'Hombros', 'Bíceps', 'Tríceps', 'Piernas', 'Glúteos', 'Core', 'Cardio'];
 const EQUIPMENT_OPTIONS = ['Barra', 'Mancuernas', 'Máquina', 'Polea', 'Peso corporal', 'Kettlebell', 'Bandas'];
@@ -271,7 +272,9 @@ const ExerciseRow = React.memo(function ExerciseRow({
                     {exercise.equipment ? (
                         <>
                             <Text style={styles.metaDot}>·</Text>
-                            <Text style={styles.exerciseSecondary}>{exercise.equipment}</Text>
+                            <Text style={styles.exerciseSecondary}>
+                                {formatEquipment(exercise.equipment)}
+                            </Text>
                         </>
                     ) : null}
                     <Text style={styles.metaDot}>·</Text>
@@ -294,7 +297,7 @@ const ExerciseRow = React.memo(function ExerciseRow({
                     onPress={onDelete}
                     accessibilityLabel={`Eliminar ${exercise.name}`}
                 >
-                    <Ionicons name="trash-outline" size={17} color={COLORS.error} />
+                    <Ionicons name="trash-outline" size={17} color={COLORS.textMuted} />
                 </TouchableOpacity>
             </View>
         </TouchableOpacity>
@@ -514,14 +517,13 @@ const styles = StyleSheet.create({
         gap: SPACING.sm,
         marginHorizontal: SPACING.lg,
         paddingHorizontal: SPACING.md,
-        height: 46,
+        height: 44,
         backgroundColor: COLORS.surface,
         borderRadius: BORDER_RADIUS.md,
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
     },
     searchInput: {
         flex: 1,
+        fontFamily: FONTS.regular,
         color: COLORS.textPrimary,
         fontSize: FONT_SIZES.sm,
     },
@@ -537,21 +539,23 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 6,
         paddingHorizontal: SPACING.md,
-        paddingVertical: 8,
-        borderRadius: BORDER_RADIUS.full,
+        paddingVertical: 7,
+        borderRadius: BORDER_RADIUS.sm,
         backgroundColor: COLORS.surface,
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: 'transparent',
     },
     filterText: {
-        fontSize: FONT_SIZES.xs,
-        fontWeight: '700',
+        fontFamily: FONTS.semibold,
+        fontSize: 11,
+        letterSpacing: 0.4,
         color: COLORS.textSecondary,
     },
     filterCount: {
-        fontSize: 10,
-        fontWeight: '700',
+        fontFamily: FONTS.display,
+        fontSize: 12,
         color: COLORS.textMuted,
+        fontVariant: ['tabular-nums'],
     },
     listContent: {
         paddingHorizontal: SPACING.lg,
@@ -563,13 +567,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         backgroundColor: COLORS.surface,
         borderRadius: BORDER_RADIUS.md,
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
         overflow: 'hidden',
         paddingRight: SPACING.xs,
     },
     muscleIndicator: {
-        width: 4,
+        width: 3,
         alignSelf: 'stretch',
     },
     exerciseInfo: {
@@ -578,8 +580,8 @@ const styles = StyleSheet.create({
         paddingLeft: SPACING.md,
     },
     exerciseName: {
+        fontFamily: FONTS.semibold,
         fontSize: FONT_SIZES.sm,
-        fontWeight: '600',
         color: COLORS.textPrimary,
     },
     exerciseMeta: {
@@ -590,10 +592,13 @@ const styles = StyleSheet.create({
         flexWrap: 'wrap',
     },
     exerciseMuscle: {
-        fontSize: 11,
-        fontWeight: '700',
+        fontFamily: FONTS.semibold,
+        fontSize: 10,
+        letterSpacing: 0.8,
+        textTransform: 'uppercase',
     },
     exerciseSecondary: {
+        fontFamily: FONTS.regular,
         fontSize: 11,
         color: COLORS.textMuted,
     },
@@ -626,8 +631,8 @@ const styles = StyleSheet.create({
         borderBottomColor: COLORS.surfaceHighlight,
     },
     modalTitle: {
-        fontSize: FONT_SIZES.lg,
-        fontWeight: '700',
+        fontFamily: FONTS.display,
+        fontSize: 22,
         color: COLORS.textPrimary,
     },
     modalClose: {
@@ -652,19 +657,18 @@ const styles = StyleSheet.create({
         gap: SPACING.sm,
     },
     fieldLabel: {
-        fontSize: FONT_SIZES.xs,
-        fontWeight: '700',
-        color: COLORS.textSecondary,
+        fontFamily: FONTS.medium,
+        fontSize: 10,
+        color: COLORS.textMuted,
         textTransform: 'uppercase',
-        letterSpacing: 0.8,
+        letterSpacing: 1.4,
     },
     input: {
         backgroundColor: COLORS.surface,
         borderRadius: BORDER_RADIUS.md,
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
         paddingHorizontal: SPACING.md,
         paddingVertical: SPACING.md,
+        fontFamily: FONTS.regular,
         color: COLORS.textPrimary,
         fontSize: FONT_SIZES.md,
     },
@@ -680,21 +684,21 @@ const styles = StyleSheet.create({
     option: {
         paddingHorizontal: SPACING.md,
         paddingVertical: 8,
-        borderRadius: BORDER_RADIUS.full,
+        borderRadius: BORDER_RADIUS.sm,
         backgroundColor: COLORS.surface,
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: 'transparent',
     },
     optionActive: {
-        backgroundColor: COLORS.primary + '25',
-        borderColor: COLORS.primary,
+        backgroundColor: COLORS.surfaceLight,
+        borderColor: COLORS.textSecondary,
     },
     optionText: {
+        fontFamily: FONTS.medium,
         fontSize: FONT_SIZES.xs,
-        fontWeight: '600',
         color: COLORS.textSecondary,
     },
     optionTextActive: {
-        color: COLORS.primaryLight,
+        color: COLORS.textPrimary,
     },
 });

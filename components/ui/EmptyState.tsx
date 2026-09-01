@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
+import { FONTS } from '../../constants/typography';
 import { Button } from './Button';
 
 interface EmptyStateProps {
@@ -19,7 +20,7 @@ export function EmptyState({ icon, title, message, actionLabel, onAction, style 
     return (
         <View style={[styles.container, style]}>
             <View style={styles.iconCircle}>
-                <Ionicons name={icon} size={32} color={COLORS.primary} />
+                <Ionicons name={icon} size={26} color={COLORS.textSecondary} />
             </View>
             <Text style={styles.title}>{title}</Text>
             {message && <Text style={styles.message}>{message}</Text>}
@@ -38,27 +39,26 @@ const styles = StyleSheet.create({
         paddingHorizontal: SPACING.lg,
         backgroundColor: COLORS.surface,
         borderRadius: BORDER_RADIUS.lg,
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
     },
     iconCircle: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
-        backgroundColor: COLORS.primary + '15',
+        width: 56,
+        height: 56,
+        borderRadius: BORDER_RADIUS.md,
+        backgroundColor: COLORS.surfaceLight,
         alignItems: 'center',
         justifyContent: 'center',
         marginBottom: SPACING.xs,
     },
     title: {
-        fontSize: FONT_SIZES.md,
-        fontWeight: '700',
+        fontFamily: FONTS.display,
+        fontSize: 19,
         color: COLORS.textPrimary,
         textAlign: 'center',
     },
     message: {
+        fontFamily: FONTS.regular,
         fontSize: FONT_SIZES.sm,
-        color: COLORS.textSecondary,
+        color: COLORS.textMuted,
         textAlign: 'center',
         lineHeight: 20,
         marginBottom: SPACING.xs,

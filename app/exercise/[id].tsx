@@ -4,10 +4,18 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-gifted-charts';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, getMuscleColor } from '../../constants/colors';
+import { FONTS } from '../../constants/typography';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { useExerciseHistory } from '../../hooks/useExerciseHistory';
-import { formatRelativeDate, formatSeconds, formatVolume, formatWeight, parseISODate } from '../../lib/utils';
+import {
+    formatEquipment,
+    formatRelativeDate,
+    formatSeconds,
+    formatVolume,
+    formatWeight,
+    parseISODate,
+} from '../../lib/utils';
 
 const { width } = Dimensions.get('window');
 
@@ -57,14 +65,14 @@ export default function ExerciseDetailScreen() {
 
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
                 <View style={styles.metaRow}>
-                    {exercise.equipment ? <MetaPill icon="build-outline" text={exercise.equipment} /> : null}
+                    {exercise.equipment ? <MetaPill icon="build-outline" text={formatEquipment(exercise.equipment)} /> : null}
                     <MetaPill icon="hourglass-outline" text={formatSeconds(exercise.default_rest_seconds)} />
                     <MetaPill icon="speedometer-outline" text={`${exercise.time_per_rep_seconds}s / rep`} />
                 </View>
 
                 {exercise.notes ? (
                     <View style={styles.notesCard}>
-                        <Ionicons name="information-circle-outline" size={16} color={COLORS.info} />
+                        <Ionicons name="information-circle-outline" size={15} color={COLORS.textMuted} />
                         <Text style={styles.notesText}>{exercise.notes}</Text>
                     </View>
                 ) : null}
@@ -82,7 +90,7 @@ export default function ExerciseDetailScreen() {
                         <View style={styles.recordsRow}>
                             <RecordCard
                                 icon="barbell"
-                                tint={COLORS.warning}
+                                tint={COLORS.textSecondary}
                                 value={summary.heaviest ? `${formatWeight(summary.heaviest.weight)} kg` : '—'}
                                 label="Peso máximo"
                                 caption={
@@ -93,7 +101,7 @@ export default function ExerciseDetailScreen() {
                             />
                             <RecordCard
                                 icon="trophy"
-                                tint={COLORS.success}
+                                tint={COLORS.textSecondary}
                                 value={summary.best1RM ? `${Math.round(summary.best1RM.estimated1RM)} kg` : '—'}
                                 label="1RM estimado"
                                 caption={
@@ -188,7 +196,7 @@ function RecordCard({
     caption?: string;
 }) {
     return (
-        <View style={[styles.recordCard, { borderColor: tint + '35' }]}>
+        <View style={[styles.recordCard, { borderLeftColor: tint }]}>
             <Ionicons name={icon} size={20} color={tint} />
             <Text style={styles.recordValue}>{value}</Text>
             <Text style={styles.recordLabel}>{label}</Text>
@@ -234,14 +242,12 @@ const styles = StyleSheet.create({
         gap: 5,
         paddingHorizontal: SPACING.sm,
         paddingVertical: 6,
-        borderRadius: BORDER_RADIUS.full,
+        borderRadius: BORDER_RADIUS.sm,
         backgroundColor: COLORS.surface,
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
     },
     metaPillText: {
         fontSize: 11,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         color: COLORS.textSecondary,
     },
     notesCard: {
@@ -249,7 +255,7 @@ const styles = StyleSheet.create({
         gap: SPACING.sm,
         padding: SPACING.md,
         borderRadius: BORDER_RADIUS.md,
-        backgroundColor: COLORS.info + '12',
+        backgroundColor: COLORS.surfaceLight,
     },
     notesText: {
         flex: 1,
@@ -263,36 +269,36 @@ const styles = StyleSheet.create({
     },
     recordCard: {
         flex: 1,
-        alignItems: 'center',
-        gap: 3,
+        gap: 2,
         padding: SPACING.md,
         borderRadius: BORDER_RADIUS.lg,
         backgroundColor: COLORS.surface,
-        borderWidth: 1,
+        borderLeftWidth: 3,
     },
     recordValue: {
-        fontSize: 22,
-        fontWeight: '800',
+        fontFamily: FONTS.display,
+        fontSize: 30,
+        lineHeight: 32,
         color: COLORS.textPrimary,
-        marginTop: 4,
+        marginTop: SPACING.sm,
+        fontVariant: ['tabular-nums'],
     },
     recordLabel: {
-        fontSize: 10,
-        fontWeight: '700',
-        color: COLORS.textSecondary,
+        fontFamily: FONTS.medium,
+        fontSize: 9,
+        color: COLORS.textMuted,
         textTransform: 'uppercase',
-        letterSpacing: 0.6,
+        letterSpacing: 1.2,
     },
     recordCaption: {
-        fontSize: 10,
-        color: COLORS.textMuted,
+        fontFamily: FONTS.regular,
+        fontSize: 11,
+        color: COLORS.textSecondary,
     },
     summaryStrip: {
         flexDirection: 'row',
         backgroundColor: COLORS.surface,
         borderRadius: BORDER_RADIUS.lg,
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
         paddingVertical: SPACING.md,
     },
     summaryItem: {
@@ -305,9 +311,10 @@ const styles = StyleSheet.create({
         marginVertical: 4,
     },
     summaryValue: {
-        fontSize: FONT_SIZES.md,
-        fontWeight: '800',
+        fontFamily: FONTS.display,
+        fontSize: 19,
         color: COLORS.textPrimary,
+        fontVariant: ['tabular-nums'],
     },
     summaryLabel: {
         fontSize: 10,
@@ -319,23 +326,22 @@ const styles = StyleSheet.create({
     card: {
         backgroundColor: COLORS.surface,
         borderRadius: BORDER_RADIUS.lg,
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
         padding: SPACING.md,
         gap: SPACING.sm,
     },
     cardTitle: {
         fontSize: FONT_SIZES.sm,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
         color: COLORS.textPrimary,
     },
     axisText: {
+        fontFamily: FONTS.display,
         color: COLORS.textMuted,
-        fontSize: 9,
+        fontSize: 11,
     },
     sectionLabel: {
         fontSize: FONT_SIZES.xs,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
         color: COLORS.textMuted,
         textTransform: 'uppercase',
         letterSpacing: 1,
@@ -347,14 +353,14 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     sessionDate: {
+        fontFamily: FONTS.semibold,
         fontSize: FONT_SIZES.sm,
-        fontWeight: '700',
         color: COLORS.textPrimary,
         textTransform: 'capitalize',
     },
     sessionVolume: {
         fontSize: FONT_SIZES.xs,
-        fontWeight: '600',
+        fontFamily: FONTS.semibold,
         color: COLORS.textMuted,
     },
     setsGrid: {
@@ -366,19 +372,20 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'baseline',
         gap: 3,
-        paddingHorizontal: 10,
+        paddingHorizontal: 9,
         paddingVertical: 5,
         borderRadius: BORDER_RADIUS.sm,
         backgroundColor: COLORS.surfaceLight,
     },
     setPillText: {
-        fontSize: FONT_SIZES.xs,
-        fontWeight: '700',
+        fontFamily: FONTS.display,
+        fontSize: 15,
         color: COLORS.textPrimary,
+        fontVariant: ['tabular-nums'],
     },
     setPillRpe: {
         fontSize: 10,
-        fontWeight: '700',
+        fontFamily: FONTS.bold,
         color: COLORS.warning,
     },
 });

@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, BORDER_RADIUS, FONT_SIZES } from '../../constants/colors';
+import { FONTS } from '../../constants/typography';
 import { Plan } from '../../lib/database.types';
 
 interface PlanCardProps {
@@ -19,20 +19,7 @@ interface PlanCardProps {
     onLongPress?: () => void;
 }
 
-// Color schemes for plans
-const PLAN_GRADIENTS: [string, string][] = [
-    ['#8B5CF6', '#6366F1'], // Purple
-    ['#06B6D4', '#0891B2'], // Cyan
-    ['#10B981', '#059669'], // Green
-    ['#F59E0B', '#D97706'], // Amber
-    ['#EC4899', '#DB2777'], // Pink
-];
-
 export function PlanCard({ plan, onPress, onLongPress }: PlanCardProps) {
-    // Get gradient based on plan name hash for consistency
-    const gradientIndex = plan.name.length % PLAN_GRADIENTS.length;
-    const gradient = PLAN_GRADIENTS[gradientIndex];
-
     // Calculate stats
     const totalRoutines = plan.items?.length || 0;
     const totalMinutes = plan.items?.reduce((sum, item) =>
@@ -48,28 +35,16 @@ export function PlanCard({ plan, onPress, onLongPress }: PlanCardProps) {
             onLongPress={onLongPress}
             activeOpacity={0.8}
         >
-            <LinearGradient
-                colors={[gradient[0] + '15', 'transparent']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.gradientBg}
-            >
-                {/* Left accent */}
-                <LinearGradient
-                    colors={gradient}
-                    style={styles.accentBar}
-                />
+            <View style={styles.gradientBg}>
+                <View style={styles.accentBar} />
 
                 <View style={styles.content}>
                     {/* Header Row */}
                     <View style={styles.headerRow}>
                         {/* Icon */}
-                        <LinearGradient
-                            colors={gradient}
-                            style={styles.iconContainer}
-                        >
-                            <Ionicons name="calendar" size={18} color="#FFF" />
-                        </LinearGradient>
+                        <View style={styles.iconContainer}>
+                            <Ionicons name="calendar" size={17} color={COLORS.textSecondary} />
+                        </View>
 
                         {/* Title and Description */}
                         <View style={styles.titleContainer}>
@@ -90,7 +65,7 @@ export function PlanCard({ plan, onPress, onLongPress }: PlanCardProps) {
                     {/* Stats Row */}
                     <View style={styles.statsRow}>
                         <View style={styles.statItem}>
-                            <Ionicons name="fitness" size={14} color={gradient[0]} />
+                            <Ionicons name="barbell" size={13} color={COLORS.textSecondary} />
                             <Text style={styles.statText}>
                                 {plan.duration_days || 7} Días
                             </Text>
@@ -125,25 +100,24 @@ export function PlanCard({ plan, onPress, onLongPress }: PlanCardProps) {
                         </View>
                     )}
                 </View>
-            </LinearGradient>
+            </View>
         </TouchableOpacity>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
-        borderRadius: BORDER_RADIUS.xl,
-        marginBottom: SPACING.md,
-        borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
+        borderRadius: BORDER_RADIUS.lg,
         overflow: 'hidden',
+        marginBottom: SPACING.sm,
         backgroundColor: COLORS.surface,
     },
     gradientBg: {
         flexDirection: 'row',
     },
     accentBar: {
-        width: 4,
+        width: 3,
+        backgroundColor: COLORS.surfaceHighlight,
     },
     content: {
         flex: 1,
@@ -155,25 +129,27 @@ const styles = StyleSheet.create({
         marginBottom: SPACING.sm,
     },
     iconContainer: {
-        width: 36,
-        height: 36,
-        borderRadius: 10,
+        width: 34,
+        height: 34,
+        borderRadius: BORDER_RADIUS.sm,
+        backgroundColor: COLORS.surfaceLight,
         alignItems: 'center',
         justifyContent: 'center',
-        marginRight: SPACING.sm,
     },
     titleContainer: {
         flex: 1,
     },
     name: {
-        fontSize: FONT_SIZES.lg,
-        fontWeight: '700',
+        fontFamily: FONTS.display,
+        fontSize: 19,
+        lineHeight: 21,
         color: COLORS.textPrimary,
     },
     description: {
-        fontSize: FONT_SIZES.sm,
-        color: COLORS.textSecondary,
-        marginTop: 2,
+        fontFamily: FONTS.regular,
+        fontSize: 12,
+        color: COLORS.textMuted,
+        marginTop: 1,
     },
     chevronContainer: {
         width: 32,
@@ -195,9 +171,9 @@ const styles = StyleSheet.create({
         gap: 4,
     },
     statText: {
+        fontFamily: FONTS.medium,
         fontSize: 12,
         color: COLORS.textSecondary,
-        fontWeight: '500',
     },
     routinePreview: {
         backgroundColor: COLORS.surfaceLight,
@@ -207,6 +183,7 @@ const styles = StyleSheet.create({
         marginTop: SPACING.xs,
     },
     routinePreviewText: {
+        fontFamily: FONTS.regular,
         fontSize: 11,
         color: COLORS.textMuted,
     },
