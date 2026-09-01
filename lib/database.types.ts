@@ -109,6 +109,22 @@ export interface WeightLog {
     date: string;
 }
 
+/**
+ * A saved AI analysis of one session.
+ *
+ * Persisted so re-opening a workout does not spend tokens generating the same
+ * verdict twice; `raw` is the model's untouched reply.
+ */
+export interface SessionAnalysis {
+    id: string;
+    session_id: string;
+    created_at: string;
+    model: string;
+    raw: string;
+    prompt_tokens: number;
+    completion_tokens: number;
+}
+
 /** Denormalised row used by the exercise-history views. */
 export interface ExerciseHistory {
     exercise_id: string;
