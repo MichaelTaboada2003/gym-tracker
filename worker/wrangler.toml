@@ -1,0 +1,11 @@
+name = "gym-tracker-analysis"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+# La API key NO va aquí. Se guarda como secreto cifrado:
+#   npx wrangler secret put GROQ_API_KEY
+#
+# Opcionales, estos sí como variables normales:
+# [vars]
+# GROQ_MODEL = "openai/gpt-oss-120b"   # fijar modelo; si se omite, se resuelve solo
+# APP_TOKEN  = "una-cadena-cualquiera" # exige la cabecera X-App-Token
