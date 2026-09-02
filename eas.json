@@ -14,7 +14,11 @@
     },
     "preview": {
       "distribution": "internal",
+      "autoIncrement": true,
       "channel": "preview",
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
         "EXPO_PUBLIC_ANALYSIS_URL": "https://gym-tracker-analysis.gym-tracker-analysis-worker.workers.dev"
       }
