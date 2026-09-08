@@ -1,9 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../../constants/colors';
-import { FONTS } from '../../constants/typography';
-import { Button } from './Button';
 
 interface Props {
     children: React.ReactNode;
@@ -16,6 +13,7 @@ interface State {
 /**
  * Catches render-time crashes so a single bad screen shows a recoverable panel
  * instead of a blank white app with no way back.
+ * Uses only core React Native primitives to avoid crashing inside the fallback itself.
  */
 export class ErrorBoundary extends React.Component<Props, State> {
     state: State = { error: null };
@@ -37,18 +35,20 @@ export class ErrorBoundary extends React.Component<Props, State> {
         return (
             <View style={styles.container}>
                 <View style={styles.iconCircle}>
-                    <Ionicons name="warning-outline" size={36} color={COLORS.warning} />
+                    <Text style={styles.iconEmoji}>⚠️</Text>
                 </View>
-                <Text style={styles.title}>Algo se rompió</Text>
+                <Text style={styles.title}>Algo no salió como esperábamos</Text>
                 <Text style={styles.subtitle}>
                     Tus datos están a salvo. Puedes reintentar sin perder nada.
                 </Text>
 
                 <ScrollView style={styles.detailBox} contentContainerStyle={styles.detailContent}>
-                    <Text style={styles.detailText}>{error.message}</Text>
+                    <Text style={styles.detailText}>{error.message || String(error)}</Text>
                 </ScrollView>
 
-                <Button title="Reintentar" onPress={this.reset} variant="gradient" size="lg" fullWidth />
+                <TouchableOpacity style={styles.button} onPress={this.reset} activeOpacity={0.8}>
+                    <Text style={styles.buttonText}>Reintentar</Text>
+                </TouchableOpacity>
             </View>
         );
     }
@@ -67,14 +67,18 @@ const styles = StyleSheet.create({
         width: 72,
         height: 72,
         borderRadius: 36,
-        backgroundColor: COLORS.warning + '20',
+        backgroundColor: 'rgba(234, 179, 8, 0.15)',
         alignItems: 'center',
         justifyContent: 'center',
     },
+    iconEmoji: {
+        fontSize: 32,
+    },
     title: {
         fontSize: FONT_SIZES.xl,
-        fontFamily: FONTS.display,
+        fontWeight: 'bold',
         color: COLORS.textPrimary,
+        textAlign: 'center',
     },
     subtitle: {
         fontSize: FONT_SIZES.sm,
@@ -96,5 +100,19 @@ const styles = StyleSheet.create({
         fontSize: FONT_SIZES.xs,
         color: COLORS.textMuted,
         fontFamily: 'monospace',
+    },
+    button: {
+        alignSelf: 'stretch',
+        backgroundColor: COLORS.primary,
+        paddingVertical: 14,
+        borderRadius: BORDER_RADIUS.md,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: SPACING.sm,
+    },
+    buttonText: {
+        color: '#FFFFFF',
+        fontSize: FONT_SIZES.md,
+        fontWeight: '600',
     },
 });

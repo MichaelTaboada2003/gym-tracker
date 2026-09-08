@@ -22,8 +22,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0F172A"
       },
-      "package": "com.personal.gymtracker",
-      "edgeToEdgeEnabled": true
+      "package": "com.personal.gymtracker"
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -31,15 +30,12 @@
     },
     "plugins": [
       "expo-router",
-      "expo-sqlite",
       "expo-font",
       [
         "expo-build-properties",
         {
           "android": {
-            "buildArchs": ["arm64-v8a"],
-            "enableMinifyInReleaseBuilds": true,
-            "extraProguardRules": "-keep class com.swmansion.reanimated.** { *; }"
+            "buildArchs": ["arm64-v8a"]
           }
         }
       ]
@@ -54,10 +50,11 @@
       }
     },
     "runtimeVersion": {
-      "policy": "sdkVersion"
+      "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/63146c69-8a97-4efe-a9d2-d58538c6a798"
+      "enabled": false,
+      "checkAutomatically": "NEVER"
     }
   }
 }

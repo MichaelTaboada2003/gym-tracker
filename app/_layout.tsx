@@ -52,46 +52,48 @@ export default function RootLayout() {
     }, []);
 
     return (
-        <SafeAreaProvider>
-            <View style={styles.container}>
-                <StatusBar style="light" />
+        <ErrorBoundary>
+            <SafeAreaProvider>
+                <View style={styles.container}>
+                    <StatusBar style="light" />
 
-                {/* Screens read from storage on mount, so nothing renders until
-                    seeding and migrations have finished. Type is gated too: a
-                    flash of system font ahead of Barlow reflows every screen.
-                    A font that fails to download is not worth blocking on. */}
-                {init.status === 'loading' || (!fontsLoaded && !fontError) ? (
-                    <View style={styles.centered}>
-                        <ActivityIndicator size="large" color={COLORS.primary} />
-                    </View>
-                ) : init.status === 'failed' ? (
-                    <View style={styles.centered}>
-                        <Text style={styles.errorTitle}>No se pudo abrir la base de datos</Text>
-                        <Text style={styles.errorDetail}>{init.error}</Text>
-                    </View>
-                ) : (
-                    <ErrorBoundary>
-                        <Stack
-                            screenOptions={{
-                                headerStyle: { backgroundColor: COLORS.background },
-                                headerTintColor: COLORS.textPrimary,
-                                headerTitleStyle: { fontFamily: FONTS.semibold },
-                                contentStyle: { backgroundColor: COLORS.background },
-                            }}
-                        >
-                            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                            <Stack.Screen name="routine/[id]" options={{ headerShown: false }} />
-                            <Stack.Screen name="plan/[id]" options={{ headerShown: false }} />
-                            <Stack.Screen name="exercise/[id]" options={{ headerShown: false }} />
-                            <Stack.Screen name="settings" options={{ headerShown: false }} />
-                        </Stack>
-                        {/* Mounted once, above every screen, so `showDialog` can be
-                            called from anywhere without prop drilling. */}
-                        <DialogHost />
-                    </ErrorBoundary>
-                )}
-            </View>
-        </SafeAreaProvider>
+                    {/* Screens read from storage on mount, so nothing renders until
+                        seeding and migrations have finished. Type is gated too: a
+                        flash of system font ahead of Barlow reflows every screen.
+                        A font that fails to download is not worth blocking on. */}
+                    {init.status === 'loading' || (!fontsLoaded && !fontError) ? (
+                        <View style={styles.centered}>
+                            <ActivityIndicator size="large" color={COLORS.primary} />
+                        </View>
+                    ) : init.status === 'failed' ? (
+                        <View style={styles.centered}>
+                            <Text style={styles.errorTitle}>No se pudo abrir la base de datos</Text>
+                            <Text style={styles.errorDetail}>{init.error}</Text>
+                        </View>
+                    ) : (
+                        <>
+                            <Stack
+                                screenOptions={{
+                                    headerStyle: { backgroundColor: COLORS.background },
+                                    headerTintColor: COLORS.textPrimary,
+                                    headerTitleStyle: { fontFamily: FONTS.semibold },
+                                    contentStyle: { backgroundColor: COLORS.background },
+                                }}
+                            >
+                                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                                <Stack.Screen name="routine/[id]" options={{ headerShown: false }} />
+                                <Stack.Screen name="plan/[id]" options={{ headerShown: false }} />
+                                <Stack.Screen name="exercise/[id]" options={{ headerShown: false }} />
+                                <Stack.Screen name="settings" options={{ headerShown: false }} />
+                            </Stack>
+                            {/* Mounted once, above every screen, so `showDialog` can be
+                                called from anywhere without prop drilling. */}
+                            <DialogHost />
+                        </>
+                    )}
+                </View>
+            </SafeAreaProvider>
+        </ErrorBoundary>
     );
 }
 
